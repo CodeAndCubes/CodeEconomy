@@ -11,7 +11,7 @@ import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.PlayerEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 
-final class ForgeLifecycle {
+public final class ForgeLifecycle {
 
     private final EconomyLifecycle lifecycle;
     private final LedgerService service;
