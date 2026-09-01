@@ -82,6 +82,20 @@ class CurrenciesTest {
         assertEquals(written, sectionsOf(TestConfigs.read(configs.path(Currencies.spec()))));
     }
 
+    /** Заводской файл, как его увидит админ: валюта секцией toml, шапка файла и описание над полями. */
+    @Test
+    void theWrittenFileIsTomlWithAHeaderAndFieldComments() {
+        TestConfigs configs = TestConfigs.of(root);
+        configs.open(Currencies.spec());
+
+        String text = TestConfigs.read(configs.path(Currencies.spec()));
+
+        assertTrue(text.contains("[currencies.coin]"), () -> "валюта не легла секцией toml:" + text);
+        assertTrue(text.contains("# Валюты сервера. Секция на валюту"), () -> "шапка файла не написана:" + text);
+        assertTrue(text.contains("# Знак валюты для показа"), () -> "описание поля не доехало до файла:" + text);
+        assertTrue(text.contains("startBalance = 25000"), () -> "значение записано не числом toml:" + text);
+    }
+
     /** Строка, дописанная человеком над секцией валюты, переживает перезапись файла модом. */
     @Test
     void aHumanCommentAboveACurrencySurvivesTheRewrite() {

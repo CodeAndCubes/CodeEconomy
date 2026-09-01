@@ -6,12 +6,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import com.mrleonardos.codecore.api.config.ConfigRoles;
 import com.mrleonardos.codecore.api.config.ConfigScope;
@@ -37,6 +39,19 @@ class EconomySettingsTest {
 
         config.top.pageSize = 0;
         assertEquals(1, config.pageSize());
+    }
+
+    /** Заводской economy.toml: шапка о том, что здесь лежит, и описание над полями секций. */
+    @Test
+    void theWrittenFileCarriesTheHeaderAndTheFieldComments(@TempDir Path root) {
+        TestConfigs configs = TestConfigs.of(root);
+        configs.open(EconomySettings.spec());
+
+        String text = TestConfigs.read(configs.path(EconomySettings.spec()));
+
+        assertTrue(text.contains("# Настройки денег, которые крутят редко"), () -> "шапка файла не написана:" + text);
+        assertTrue(text.contains("[history]"), () -> "секции нет в файле:" + text);
+        assertTrue(text.contains("# Сколько часов записи живут"), () -> "описание поля не доехало до файла:" + text);
     }
 
     @Test
