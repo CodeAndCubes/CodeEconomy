@@ -18,6 +18,9 @@ import com.mrleonardos.codeeconomy.internal.store.SchemaMigrations;
  * Хранилище, журнал в логе, валюта по умолчанию и границы перевода уехали в главный файл линейки, и
  * второго места с этими ключами нет.
  */
+@Comment({ "Настройки денег, которые крутят редко. Общее для линейки лежит в config/code/config.toml:",
+    "провайдер хранилища и автосейв в [storage], записи в лог в [audit], валюта по умолчанию и",
+    "границы перевода в [economy]. Валюты лежат по соседству, в economy-currencies.toml." })
 public final class EconomySettings {
 
     public static final int DEFAULT_HISTORY_ENTRIES = 10000;

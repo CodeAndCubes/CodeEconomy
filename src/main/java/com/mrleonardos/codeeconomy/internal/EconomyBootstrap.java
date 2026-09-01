@@ -141,7 +141,6 @@ public final class EconomyBootstrap {
         List<CurrencyRecord> currencies = Currencies.load(
             configs.open(Currencies.spec())
                 .get(),
-            config.currencyId(),
             limits,
             log);
         return LedgerService.create(

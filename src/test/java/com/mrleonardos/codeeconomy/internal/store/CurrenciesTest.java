@@ -3,20 +3,30 @@ package com.mrleonardos.codeeconomy.internal.store;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import com.mrleonardos.codecore.api.config.ConfigFile;
 import com.mrleonardos.codeeconomy.api.CurrencyIds;
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
 import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
 import com.mrleonardos.codeeconomy.internal.RecordingLogger;
+import com.mrleonardos.codeeconomy.internal.TestConfigs;
 
 class CurrenciesTest {
 
     private static final String COIN = CurrencyIds.DEFAULT;
+
+    @TempDir
+    Path root;
 
     @Test
     void defaultsCarryOneCoin() {
@@ -42,26 +52,29 @@ class CurrenciesTest {
     }
 
     /**
-     * Порядок секций toml до мода не доезжает: разбор кладёт их в неупорядоченную карту. Поэтому валюта
-     * по умолчанию идёт первой, а остальные по идентификатору, и ответ один и тот же от запуска к
-     * запуску.
+     * Порядок валют в файле это порядок показа: мод его не пересортировывает и не теряет между чтением
+     * и записью. Сторож против возврата обхода, который сортировал валюты сам; что порядок переживает
+     * разбор toml, сторожит тест в ядре, здесь файл пишет подставной ConfigService.
      */
     @Test
-    void theDefaultCurrencyGoesFirstAndTheRestByIdentifier() {
-        CurrenciesFile file = CurrenciesFile
-            .of(Arrays.asList(EconomyFixtures.credit(), EconomyFixtures.coin(), zeny()));
+    void theOrderOfTheFileSurvivesReadingAndWriting() {
+        TestConfigs configs = new TestConfigs(root);
+        List<String> written = Arrays.asList("zeny", "coin", "gem", "alpha", "credit");
+        ConfigFile<CurrenciesFile> file = configs.open(Currencies.spec());
+        file.get().currencies = entries(written);
+        file.save();
 
-        List<CurrencyRecord> loaded = Currencies.load(file, COIN, ceilings(), EconomyFixtures.LOG);
+        file.reload();
+        file.save();
+        file.reload();
 
         assertEquals(
-            Arrays.asList(COIN, "credit", "zeny"),
-            Arrays.asList(
-                loaded.get(0)
-                    .id(),
-                loaded.get(1)
-                    .id(),
-                loaded.get(2)
-                    .id()));
+            written,
+            new ArrayList<>(
+                file.get()
+                    .entries()
+                    .keySet()));
+        assertEquals(written, identifiers(load(file.get())));
     }
 
     @Test
@@ -128,7 +141,7 @@ class CurrenciesTest {
         file.currencies.put("credit", credit);
         RecordingLogger log = new RecordingLogger();
 
-        List<CurrencyRecord> loaded = Currencies.load(file, COIN, ceilings(), log.logger());
+        List<CurrencyRecord> loaded = Currencies.load(file, ceilings(), log.logger());
 
         assertEquals(1, loaded.size(), "негодная валюта пропущена, остаётся заводская");
         assertEquals(
@@ -139,7 +152,23 @@ class CurrenciesTest {
     }
 
     private static List<CurrencyRecord> load(CurrenciesFile file) {
-        return Currencies.load(file, COIN, ceilings(), EconomyFixtures.LOG);
+        return Currencies.load(file, ceilings(), EconomyFixtures.LOG);
+    }
+
+    private static Map<String, CurrencyEntry> entries(List<String> identifiers) {
+        Map<String, CurrencyEntry> written = new LinkedHashMap<>();
+        for (String id : identifiers) {
+            written.put(id, entry(2, Long.valueOf(1000L)));
+        }
+        return written;
+    }
+
+    private static List<String> identifiers(List<CurrencyRecord> currencies) {
+        List<String> found = new ArrayList<>();
+        for (CurrencyRecord currency : currencies) {
+            found.add(currency.id());
+        }
+        return found;
     }
 
     private static CurrencyEntry entry(int decimals, Long maxBalance) {

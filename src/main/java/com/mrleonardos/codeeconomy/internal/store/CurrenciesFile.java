@@ -1,17 +1,18 @@
 package com.mrleonardos.codeeconomy.internal.store;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.TreeSet;
 
 import com.mrleonardos.codecore.api.config.Comment;
-import com.mrleonardos.codeeconomy.api.CurrencyIds;
 import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
 
 /** Содержимое {@code config/code/economy/economy-currencies.toml}. */
+@Comment({ "Валюты сервера. Секция на валюту, порядок секций это порядок показа в командах.",
+    "Настройки самого мода лежат по соседству, в economy.toml." })
 public final class CurrenciesFile {
 
-    @Comment({ "Валюты сервера. Имя секции это идентификатор валюты, [a-z0-9_] до 16 знаков.",
+    @Comment({ "Имя секции это идентификатор валюты, [a-z0-9_] до 16 знаков.",
         "Валюта без maxBalance пропускается с записью в лог, остальные работают." })
     public Map<String, CurrencyEntry> currencies = new LinkedHashMap<>();
 
@@ -32,22 +33,8 @@ public final class CurrenciesFile {
         return file;
     }
 
-    /** Записи в порядке показа: валюта по умолчанию первой, дальше по идентификатору. */
-    public Map<String, CurrencyEntry> ordered(String defaultCurrencyId) {
-        Map<String, CurrencyEntry> shown = new LinkedHashMap<>();
-        if (currencies == null) {
-            return shown;
-        }
-        String first = CurrencyIds.normalize(defaultCurrencyId);
-        CurrencyEntry leading = first == null ? null : currencies.get(first);
-        if (leading != null) {
-            shown.put(first, leading);
-        }
-        for (String id : new TreeSet<>(currencies.keySet())) {
-            if (!shown.containsKey(id)) {
-                shown.put(id, currencies.get(id));
-            }
-        }
-        return shown;
+    /** Записи в том порядке, в каком они лежат в файле. */
+    public Map<String, CurrencyEntry> entries() {
+        return currencies == null ? Collections.<String, CurrencyEntry>emptyMap() : currencies;
     }
 }

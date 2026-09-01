@@ -20,9 +20,9 @@ import com.mrleonardos.codeeconomy.internal.EconomyConstants;
  * Валюты из {@code config/code/economy/economy-currencies.toml}.
  *
  * <p>
- * Порядок показа задаётся не файлом: разбор toml кладёт секции в неупорядоченную карту, и порядок строк
- * до мода не доезжает. Поэтому валюта по умолчанию идёт первой, а остальные по идентификатору, и ответ
- * один и тот же от запуска к запуску.
+ * Порядок секций файла доезжает до мода как есть и становится порядком показа. Так работает разбор toml
+ * начиная с night-config 3.8: до неё вложенные таблицы заводились на неупорядоченной карте, и порядок
+ * терялся. За сохранностью порядка следит {@code CurrenciesTest}.
  */
 public final class Currencies {
 
@@ -45,11 +45,10 @@ public final class Currencies {
      * Разобрать файл. Негодная валюта пропускается с записью в лог, файл без единой годной заменяется
      * заводской {@code coin}.
      */
-    public static List<CurrencyRecord> load(CurrenciesFile file, String defaultCurrencyId, EconomyLimits limits,
-        Logger log) {
+    public static List<CurrencyRecord> load(CurrenciesFile file, EconomyLimits limits, Logger log) {
         List<CurrencyRecord> loaded = new ArrayList<>();
         if (file != null) {
-            for (Map.Entry<String, CurrencyEntry> entry : file.ordered(defaultCurrencyId)
+            for (Map.Entry<String, CurrencyEntry> entry : file.entries()
                 .entrySet()) {
                 if (loaded.size() >= limits.currencies()) {
                     warn(
