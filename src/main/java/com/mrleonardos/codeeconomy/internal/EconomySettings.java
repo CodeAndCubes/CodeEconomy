@@ -4,6 +4,7 @@ import org.apache.logging.log4j.Logger;
 
 import com.mrleonardos.codecore.api.config.ConfigScope;
 import com.mrleonardos.codecore.api.config.ConfigSpec;
+import com.mrleonardos.codecore.api.config.Migration;
 import com.mrleonardos.codecore.api.service.ServicePriority;
 import com.mrleonardos.codeeconomy.api.CurrencyIds;
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
@@ -55,10 +56,13 @@ public final class EconomySettings {
     }
 
     public static ConfigSpec<EconomySettings> spec() {
-        return ConfigSpec.of(MODID, SETTINGS_FILE, EconomySettings.class)
+        ConfigSpec.Builder<EconomySettings> builder = ConfigSpec.of(MODID, SETTINGS_FILE, EconomySettings.class)
             .scope(ConfigScope.SETTINGS)
-            .schemaVersion(SchemaMigrations.SETTINGS_VERSION)
-            .defaults(EconomySettings::defaults)
+            .schemaVersion(SchemaMigrations.SETTINGS_VERSION);
+        for (Migration migration : SchemaMigrations.settingsChain()) {
+            builder.migration(migration);
+        }
+        return builder.defaults(EconomySettings::defaults)
             .build();
     }
 

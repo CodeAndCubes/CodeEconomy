@@ -5,9 +5,15 @@ import java.util.List;
 
 import com.mrleonardos.codecore.api.config.Migration;
 
+/**
+ * Версии схем и цепочки миграций файлов мода.
+ *
+ * <p>
+ * Цепочки пустые, и это единственное место, где они появятся. Каждая цепочка подключается к своему
+ * {@code ConfigSpec} сразу, даже пустой: иначе первая написанная миграция легла бы сюда и тихо не
+ * применилась.
+ */
 public final class SchemaMigrations {
-
-    public static final String VERSION_FIELD = "schemaVersion";
 
     public static final int SETTINGS_VERSION = 1;
     public static final int CURRENCIES_VERSION = 1;
