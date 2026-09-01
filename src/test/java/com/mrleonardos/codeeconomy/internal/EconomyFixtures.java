@@ -12,7 +12,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import com.mrleonardos.codecore.api.config.AuditSettings;
-import com.mrleonardos.codecore.api.config.ConfigService;
 import com.mrleonardos.codecore.api.config.StorageSettings;
 import com.mrleonardos.codecore.api.util.Scheduler;
 import com.mrleonardos.codeeconomy.api.CurrencyIds;
@@ -180,7 +179,7 @@ public final class EconomyFixtures {
      * Провайдер спрашивается по несуществующему имени нарочно: общий реестр {@code EconomyApi} держит
      * чужого провайдера с именем json, и без этого сервис забрал бы его.
      */
-    public static LedgerService service(ConfigService configs, List<CurrencyRecord> currencies) {
+    public static LedgerService service(TestConfigs configs, List<CurrencyRecord> currencies) {
         Configs config = configs();
         config.provider = "builtin-under-test";
         return LedgerService.create(

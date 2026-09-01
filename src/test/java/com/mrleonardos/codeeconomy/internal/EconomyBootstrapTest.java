@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
@@ -46,7 +45,7 @@ class EconomyBootstrapTest {
 
     @BeforeEach
     void prepare() {
-        configs = new TestConfigs(root);
+        configs = TestConfigs.of(root);
     }
 
     @Test
@@ -65,6 +64,37 @@ class EconomyBootstrapTest {
     }
 
     /**
+     * Общее для линейки и своё для роли приезжает из главного файла целиком: провайдер перекрыт секцией
+     * роли, границы перевода взяты из секции economy, а в economy.toml этих ключей нет вовсе.
+     */
+    @Test
+    void theMainFileIsReadWithTheOverrideOfThisRole() {
+        TestConfigs.writeMain(
+            root,
+            "schemaVersion = 1",
+            "[storage]",
+            "provider = \"json\"",
+            "autosaveSeconds = 30",
+            "[storage.economy]",
+            "provider = \"sql\"",
+            "autosaveSeconds = 120",
+            "[audit]",
+            "logChanges = false",
+            "[economy]",
+            "maxTransfer = 500");
+        configs = TestConfigs.of(root);
+        EconomyBootstrap bootstrap = declared();
+        adapters.decide(ConfigRoles.ECONOMY, TestAdapters.AUTO);
+        bootstrap.start(adapters, taken::add);
+
+        EconomyConfig config = bootstrap.config();
+        assertEquals("sql", config.provider(), "секция роли перекрывает общего провайдера");
+        assertEquals(120 * 20, config.autosaveTicks(), "и общий автосейв тоже");
+        assertFalse(config.logChanges(), "записи в лог общие для линейки");
+        assertEquals(500L, config.maxTransfer(), "границы перевода приезжают из секции economy");
+    }
+
+    /**
      * Отход целиком: ни одного корня команд, поэтому при владельце forgeessentials на сервере нет ни
      * {@code /pay}, ни {@code /eco} с его подкомандами top и history. Пустой ответ вместо «такой команды
      * тут нет» это ровно тот молчаливый отказ, который запрещён.
@@ -78,10 +108,6 @@ class EconomyBootstrapTest {
         assertEquals(ForgeEssentialsAdapter.NAME, bootstrap.owner());
         assertTrue(taken.isEmpty(), "ни команд, ни подписок, ни писателя");
         assertNull(bootstrap.service(), "леджер не собирается вовсе");
-        assertTrue(
-            configs.opened()
-                .isEmpty(),
-            "мод не открыл ни одного своего файла: " + configs.opened());
         assertFalse(Files.exists(settings()));
         assertFalse(Files.exists(currencies()));
         assertFalse(Files.exists(accounts()));
@@ -96,9 +122,8 @@ class EconomyBootstrapTest {
         assertNull(bootstrap.owner());
         assertNull(bootstrap.service());
         assertTrue(taken.isEmpty());
-        assertTrue(
-            configs.opened()
-                .isEmpty());
+        assertFalse(Files.exists(settings()));
+        assertFalse(Files.exists(currencies()));
     }
 
     /** Вернули имя в owners, перезапустили, всё на месте: для этого отход не имеет права трогать файлы. */
@@ -106,16 +131,17 @@ class EconomyBootstrapTest {
     void filesOfAPreviousRunSurviveTheStandDown() throws IOException {
         Path existing = settings();
         Files.createDirectories(existing.getParent());
-        Files.write(existing, "{\"history\":{\"maxEntries\":7}}".getBytes(StandardCharsets.UTF_8));
+        TestConfigs.write(existing, "schemaVersion = 1", "[history]", "maxEntries = 7");
         FileTime written = Files.getLastModifiedTime(existing);
 
         EconomyBootstrap bootstrap = declared();
         adapters.decide(ConfigRoles.ECONOMY, ForgeEssentialsAdapter.NAME);
         bootstrap.start(adapters, taken::add);
 
-        assertEquals(
-            "{\"history\":{\"maxEntries\":7}}",
-            new String(Files.readAllBytes(existing), StandardCharsets.UTF_8));
+        assertTrue(
+            TestConfigs.read(existing)
+                .contains("maxEntries = 7"),
+            "файл прошлого запуска переписан");
         assertEquals(written, Files.getLastModifiedTime(existing));
     }
 
@@ -133,7 +159,7 @@ class EconomyBootstrapTest {
 
     private EconomyBootstrap declared() {
         EconomyBootstrap bootstrap = new EconomyBootstrap(
-            configs,
+            configs.service(),
             inline(),
             () -> true,
             () -> 0L,

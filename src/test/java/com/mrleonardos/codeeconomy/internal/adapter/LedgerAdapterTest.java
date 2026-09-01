@@ -64,6 +64,6 @@ class LedgerAdapterTest {
 
     private LedgerService assemble() {
         built.incrementAndGet();
-        return EconomyFixtures.service(new TestConfigs(root), Collections.singletonList(EconomyFixtures.coin()));
+        return EconomyFixtures.service(TestConfigs.of(root), Collections.singletonList(EconomyFixtures.coin()));
     }
 }

@@ -121,7 +121,7 @@ class LedgerServiceTest {
         // другой тест регистрирует в общем реестре EconomyApi чужого провайдера json, встроенного
         // получаем через несуществующее имя
         config.provider = "builtin-under-test";
-        TestConfigs files = new TestConfigs(root);
+        TestConfigs files = TestConfigs.of(root);
         return LedgerService.create(
             config.build(),
             Collections.singletonList(EconomyFixtures.coin()),

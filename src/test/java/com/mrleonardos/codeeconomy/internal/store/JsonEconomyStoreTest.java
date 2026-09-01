@@ -437,7 +437,8 @@ class JsonEconomyStoreTest {
     }
 
     private Path checkpointPath() {
-        return new TestConfigs(root).path(JsonEconomyStore.spec());
+        return TestConfigs.of(root)
+            .path(JsonEconomyStore.spec());
     }
 
     private Path journalPath() {
@@ -450,7 +451,7 @@ class JsonEconomyStoreTest {
     }
 
     private JsonEconomyStore storeWithWindow(long idempotencyMillis) {
-        TestConfigs files = new TestConfigs(root);
+        TestConfigs files = TestConfigs.of(root);
         return new JsonEconomyStore(
             files.open(JsonEconomyStore.spec()),
             EconomyFixtures.settings()

@@ -27,7 +27,7 @@ class LedgerContractTest extends EconomyServiceContract {
     protected EconomyService service() {
         if (service == null) {
             service = EconomyFixtures
-                .service(new TestConfigs(root), Arrays.asList(EconomyFixtures.coin(), EconomyFixtures.credit()));
+                .service(TestConfigs.of(root), Arrays.asList(EconomyFixtures.coin(), EconomyFixtures.credit()));
         }
         return service;
     }

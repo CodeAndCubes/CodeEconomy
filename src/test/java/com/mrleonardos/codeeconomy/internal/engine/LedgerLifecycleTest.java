@@ -181,7 +181,7 @@ class LedgerLifecycleTest {
     }
 
     private JsonEconomyStore store() {
-        TestConfigs files = new TestConfigs(root);
+        TestConfigs files = TestConfigs.of(root);
         return new JsonEconomyStore(
             files.open(JsonEconomyStore.spec()),
             EconomyFixtures.settings()
@@ -193,14 +193,17 @@ class LedgerLifecycleTest {
     }
 
     private Path journalPath() {
-        return new TestConfigs(root).path(JsonEconomyStore.spec())
+        return TestConfigs.of(root)
+            .path(JsonEconomyStore.spec())
             .getParent()
             .resolve(EconomyConstants.JOURNAL_FILE);
     }
 
     private String readCheckpoint() throws Exception {
         return new String(
-            Files.readAllBytes(new TestConfigs(root).path(JsonEconomyStore.spec())),
+            Files.readAllBytes(
+                TestConfigs.of(root)
+                    .path(JsonEconomyStore.spec())),
             StandardCharsets.UTF_8);
     }
 }

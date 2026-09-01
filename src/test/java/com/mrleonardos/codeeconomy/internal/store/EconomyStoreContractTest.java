@@ -146,7 +146,7 @@ class EconomyStoreContractTest {
             return () -> store;
         }
         return () -> {
-            TestConfigs files = new TestConfigs(root);
+            TestConfigs files = TestConfigs.of(root);
             return new JsonEconomyStore(
                 files.open(JsonEconomyStore.spec()),
                 EconomyFixtures.settings()

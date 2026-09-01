@@ -136,7 +136,7 @@ class PlatformMaintenanceImportTest {
         // другой тест держит в общем реестре EconomyApi чужого провайдера с именем json, поэтому
         // зовём несуществующее имя: сервис возьмёт встроенного провайдера и будет писать журнал сюда
         config.provider = "builtin-under-test";
-        TestConfigs files = new TestConfigs(root);
+        TestConfigs files = TestConfigs.of(root);
         return LedgerService.create(
             config.build(),
             Collections.singletonList(EconomyFixtures.coin()),
@@ -172,7 +172,8 @@ class PlatformMaintenanceImportTest {
     }
 
     private Path journal() {
-        return new TestConfigs(root).path(JsonEconomyStore.spec())
+        return TestConfigs.of(root)
+            .path(JsonEconomyStore.spec())
             .getParent()
             .resolve(EconomyConstants.JOURNAL_FILE);
     }

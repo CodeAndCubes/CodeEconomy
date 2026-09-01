@@ -9,6 +9,8 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -24,6 +26,8 @@ import com.mrleonardos.codeeconomy.internal.TestConfigs;
 class CurrenciesTest {
 
     private static final String COIN = CurrencyIds.DEFAULT;
+
+    private static final String HUMAN_COMMENT = "# копим на рынок, не трогать";
 
     @TempDir
     Path root;
@@ -53,12 +57,12 @@ class CurrenciesTest {
 
     /**
      * Порядок валют в файле это порядок показа: мод его не пересортировывает и не теряет между чтением
-     * и записью. Сторож против возврата обхода, который сортировал валюты сам; что порядок переживает
-     * разбор toml, сторожит тест в ядре, здесь файл пишет подставной ConfigService.
+     * и записью. Сторож сразу против двух откатов: возврата обхода, который сортировал валюты сам, и
+     * версии night-config в ядре ниже 3.8, на которой разбор заводил секции неупорядоченными.
      */
     @Test
     void theOrderOfTheFileSurvivesReadingAndWriting() {
-        TestConfigs configs = new TestConfigs(root);
+        TestConfigs configs = TestConfigs.of(root);
         List<String> written = Arrays.asList("zeny", "coin", "gem", "alpha", "credit");
         ConfigFile<CurrenciesFile> file = configs.open(Currencies.spec());
         file.get().currencies = entries(written);
@@ -75,6 +79,27 @@ class CurrenciesTest {
                     .entries()
                     .keySet()));
         assertEquals(written, identifiers(load(file.get())));
+        assertEquals(written, sectionsOf(TestConfigs.read(configs.path(Currencies.spec()))));
+    }
+
+    /** Строка, дописанная человеком над секцией валюты, переживает перезапись файла модом. */
+    @Test
+    void aHumanCommentAboveACurrencySurvivesTheRewrite() {
+        TestConfigs configs = TestConfigs.of(root);
+        ConfigFile<CurrenciesFile> file = configs.open(Currencies.spec());
+        Path path = configs.path(Currencies.spec());
+        TestConfigs.write(
+            path,
+            TestConfigs.read(path)
+                .replace("[currencies.coin]", HUMAN_COMMENT + System.lineSeparator() + "[currencies.coin]"));
+
+        file.reload();
+        file.save();
+
+        assertTrue(
+            TestConfigs.read(path)
+                .contains(HUMAN_COMMENT),
+            "человеческий комментарий стёрт записью мода: " + TestConfigs.read(path));
     }
 
     @Test
@@ -161,6 +186,17 @@ class CurrenciesTest {
             written.put(id, entry(2, Long.valueOf(1000L)));
         }
         return written;
+    }
+
+    /** Имена секций валют в том порядке, в каком они лежат в написанном файле. */
+    private static List<String> sectionsOf(String text) {
+        List<String> found = new ArrayList<>();
+        Matcher headers = Pattern.compile("\\[currencies\\.([a-z0-9_]+)]")
+            .matcher(text);
+        while (headers.find()) {
+            found.add(headers.group(1));
+        }
+        return found;
     }
 
     private static List<String> identifiers(List<CurrencyRecord> currencies) {
