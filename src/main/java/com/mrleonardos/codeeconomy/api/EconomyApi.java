@@ -47,7 +47,7 @@ public final class EconomyApi {
 
     /**
      * Зарегистрировать хранилище. Провайдер с уже занятым именем заменяет прежнего, активным становится
-     * тот, чьё имя указано в настройке {@code storage.provider}.
+     * тот, чьё имя стоит в {@code [storage] provider} главного файла линейки.
      *
      * @throws IllegalStateException если реестр уже заморожен
      */
@@ -57,7 +57,7 @@ public final class EconomyApi {
         STORES.put(store.id(), store);
     }
 
-    /** Хранилище по имени из настройки {@code storage.provider}. */
+    /** Хранилище по имени из {@code [storage] provider} главного файла. */
     public static synchronized Optional<EconomyStore> store(String id) {
         return Optional.ofNullable(STORES.get(Objects.requireNonNull(id, "id")));
     }

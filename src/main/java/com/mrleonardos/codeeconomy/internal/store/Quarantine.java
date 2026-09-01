@@ -22,7 +22,7 @@ public final class Quarantine {
 
     private Quarantine() {}
 
-    /** Убрать журнал в {@code journal.jsonl.quarantine}. Цель или пустой ответ, если файл не ушёл. */
+    /** Убрать журнал в файл с суффиксом {@code .quarantine}. Цель или пустой ответ, если файл не ушёл. */
     public static Path quarantine(Path journal, Logger log) {
         Path target = journal.resolveSibling(journal.getFileName() + SUFFIX);
         try {

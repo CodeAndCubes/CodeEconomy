@@ -1,28 +1,30 @@
 package com.mrleonardos.codeeconomy.internal.store;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Arrays;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 import com.mrleonardos.codeeconomy.api.CurrencyIds;
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
 import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
+import com.mrleonardos.codeeconomy.internal.RecordingLogger;
 
 class CurrenciesTest {
 
+    private static final String COIN = CurrencyIds.DEFAULT;
+
     @Test
     void defaultsCarryOneCoin() {
-        List<CurrencyRecord> loaded = Currencies.load(Currencies.defaults(), ceilings(), EconomyFixtures.LOG);
+        List<CurrencyRecord> loaded = load(CurrenciesFile.defaults());
 
         assertEquals(1, loaded.size());
         assertEquals(
-            CurrencyIds.DEFAULT,
+            COIN,
             loaded.get(0)
                 .id());
         assertEquals(
@@ -39,33 +41,35 @@ class CurrenciesTest {
                 .format());
     }
 
+    /**
+     * Порядок секций toml до мода не доезжает: разбор кладёт их в неупорядоченную карту. Поэтому валюта
+     * по умолчанию идёт первой, а остальные по идентификатору, и ответ один и тот же от запуска к
+     * запуску.
+     */
     @Test
-    void loadKeepsTheOrderOfTheFile() {
-        JsonObject file = file(Currencies.encode(Arrays.asList(EconomyFixtures.coin(), EconomyFixtures.credit())));
+    void theDefaultCurrencyGoesFirstAndTheRestByIdentifier() {
+        CurrenciesFile file = CurrenciesFile
+            .of(Arrays.asList(EconomyFixtures.credit(), EconomyFixtures.coin(), zeny()));
 
-        List<CurrencyRecord> loaded = Currencies.load(file, ceilings(), EconomyFixtures.LOG);
+        List<CurrencyRecord> loaded = Currencies.load(file, COIN, ceilings(), EconomyFixtures.LOG);
 
         assertEquals(
-            "coin",
-            loaded.get(0)
-                .id());
-        assertEquals(
-            "credit",
-            loaded.get(1)
-                .id());
+            Arrays.asList(COIN, "credit", "zeny"),
+            Arrays.asList(
+                loaded.get(0)
+                    .id(),
+                loaded.get(1)
+                    .id(),
+                loaded.get(2)
+                    .id()));
     }
 
     @Test
     void maxBalanceAboveTheCeilingIsCapped() {
-        JsonObject entry = new JsonObject();
-        entry.addProperty(Currencies.ID, "coin");
-        entry.addProperty(Currencies.DECIMALS, 2);
-        entry.addProperty(Currencies.MAX_BALANCE, Long.valueOf(Long.MAX_VALUE));
+        CurrenciesFile file = new CurrenciesFile();
+        file.currencies.put(COIN, entry(2, Long.valueOf(Long.MAX_VALUE)));
 
-        JsonArray array = new JsonArray();
-        array.add(entry);
-
-        List<CurrencyRecord> loaded = Currencies.load(file(array), ceilings(), EconomyFixtures.LOG);
+        List<CurrencyRecord> loaded = load(file);
 
         assertEquals(1, loaded.size());
         assertEquals(
@@ -76,61 +80,40 @@ class CurrenciesTest {
 
     @Test
     void unusableEntriesAreSkipped() {
-        JsonArray array = new JsonArray();
-        array.add(entryWithId("Bad Id"));
-        array.add(
-            Currencies.encode(Arrays.asList(EconomyFixtures.coin()))
-                .get(0));
+        CurrenciesFile file = new CurrenciesFile();
+        file.currencies.put("Bad Id", entry(2, Long.valueOf(1000L)));
+        file.currencies.put(COIN, CurrencyEntry.of(EconomyFixtures.coin()));
 
-        List<CurrencyRecord> loaded = Currencies.load(file(array), ceilings(), EconomyFixtures.LOG);
+        List<CurrencyRecord> loaded = load(file);
 
         assertEquals(1, loaded.size());
         assertEquals(
-            CurrencyIds.DEFAULT,
+            COIN,
             loaded.get(0)
                 .id());
     }
 
     @Test
     void currencyCeilingCutsTheTail() {
-        JsonArray array = new JsonArray();
+        CurrenciesFile file = new CurrenciesFile();
         for (int index = 0; index < EconomyLimits.DEFAULT_CURRENCIES + 5; index++) {
-            array.add(entryWithId("cur" + index));
+            file.currencies.put("cur" + index, entry(2, Long.valueOf(1000L)));
         }
 
-        List<CurrencyRecord> loaded = Currencies.load(file(array), ceilings(), EconomyFixtures.LOG);
+        List<CurrencyRecord> loaded = load(file);
 
         assertEquals(EconomyLimits.DEFAULT_CURRENCIES, loaded.size());
     }
 
     @Test
     void fileWithoutCurrenciesFallsBackToCoin() {
-        List<CurrencyRecord> loaded = Currencies.load(new JsonObject(), ceilings(), EconomyFixtures.LOG);
+        List<CurrencyRecord> loaded = load(new CurrenciesFile());
 
         assertEquals(1, loaded.size());
         assertEquals(
-            CurrencyIds.DEFAULT,
+            COIN,
             loaded.get(0)
                 .id());
-    }
-
-    private static JsonObject file(JsonArray currencies) {
-        JsonObject file = new JsonObject();
-        file.add(Currencies.LIST_FIELD, currencies);
-        return file;
-    }
-
-    private static JsonObject entryWithId(String id) {
-        JsonObject entry = new JsonObject();
-        entry.addProperty(Currencies.ID, id);
-        entry.addProperty(Currencies.DECIMALS, 2);
-        entry.addProperty(Currencies.MAX_BALANCE, Long.valueOf(1000L));
-        return entry;
-    }
-
-    private static EconomyLimits ceilings() {
-        return EconomyFixtures.settings()
-            .ceilings(EconomyFixtures.LOG);
     }
 
     /**
@@ -139,19 +122,42 @@ class CurrenciesTest {
      */
     @Test
     void currencyWithoutMaxBalanceIsSkippedWithALogLine() {
-        JsonObject entry = new JsonObject();
-        entry.addProperty(Currencies.ID, "credit");
-        entry.addProperty(Currencies.DECIMALS, 0);
-        entry.addProperty(Currencies.START_BALANCE, Long.valueOf(100L));
+        CurrenciesFile file = new CurrenciesFile();
+        CurrencyEntry credit = entry(0, null);
+        credit.startBalance = Long.valueOf(100L);
+        file.currencies.put("credit", credit);
+        RecordingLogger log = new RecordingLogger();
 
-        JsonArray list = new JsonArray();
-        list.add(entry);
-        List<CurrencyRecord> loaded = Currencies.load(file(list), ceilings(), EconomyFixtures.LOG);
+        List<CurrencyRecord> loaded = Currencies.load(file, COIN, ceilings(), log.logger());
 
         assertEquals(1, loaded.size(), "негодная валюта пропущена, остаётся заводская");
         assertEquals(
-            CurrencyIds.DEFAULT,
+            COIN,
             loaded.get(0)
                 .id());
+        assertTrue(log.anyWarnContains("maxBalance"), "в лог уходит имя ключа, которого не хватило");
+    }
+
+    private static List<CurrencyRecord> load(CurrenciesFile file) {
+        return Currencies.load(file, COIN, ceilings(), EconomyFixtures.LOG);
+    }
+
+    private static CurrencyEntry entry(int decimals, Long maxBalance) {
+        CurrencyEntry entry = new CurrencyEntry();
+        entry.decimals = Integer.valueOf(decimals);
+        entry.maxBalance = maxBalance;
+        return entry;
+    }
+
+    private static CurrencyRecord zeny() {
+        return CurrencyRecord.builder("zeny")
+            .decimals(0)
+            .maxBalance(1000L)
+            .build();
+    }
+
+    private static EconomyLimits ceilings() {
+        return EconomyFixtures.settings()
+            .ceilings(EconomyFixtures.LOG);
     }
 }

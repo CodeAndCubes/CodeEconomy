@@ -4,9 +4,10 @@ package com.mrleonardos.codeeconomy.api.store;
  * Хранилище денег: точка расширения для чужих провайдеров.
  *
  * <p>
- * Встроенный провайдер {@code json} держит чекпоинт {@code accounts.json} и append-only журнал
- * {@code journal.jsonl}. Чужой мод регистрирует свою реализацию в {@code EconomyApi}, а выбирается он
- * по имени из настройки {@code storage.provider}. Провайдер работает с готовыми счетами и записями и
+ * Встроенный провайдер {@code json} держит чекпоинт {@code economy-accounts.json} и append-only журнал
+ * {@code economy-journal.jsonl} в папке мира. Чужой мод регистрирует свою реализацию в
+ * {@code EconomyApi}, а выбирается она по имени из {@code [storage] provider} главного файла. Провайдер работает с
+ * готовыми счетами и записями и
  * не знает, откуда пришла мутация.
  *
  * <p>
@@ -17,7 +18,7 @@ package com.mrleonardos.codeeconomy.api.store;
  */
 public interface EconomyStore {
 
-    /** Имя провайдера, по нему его выбирает настройка {@code storage.provider}. */
+    /** Имя провайдера, по нему его выбирает ключ {@code [storage] provider} главного файла. */
     String id();
 
     /** Прочитать состояние целиком: чекпоинт плюс записи журнала после него. */

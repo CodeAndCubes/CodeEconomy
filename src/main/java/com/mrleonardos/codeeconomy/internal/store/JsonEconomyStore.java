@@ -14,6 +14,8 @@ import org.apache.logging.log4j.Logger;
 
 import com.google.gson.JsonObject;
 import com.mrleonardos.codecore.api.config.ConfigFile;
+import com.mrleonardos.codecore.api.config.ConfigFormat;
+import com.mrleonardos.codecore.api.config.ConfigRoles;
 import com.mrleonardos.codecore.api.config.ConfigScope;
 import com.mrleonardos.codecore.api.config.ConfigSpec;
 import com.mrleonardos.codecore.api.config.Migration;
@@ -28,11 +30,13 @@ import com.mrleonardos.codeeconomy.api.store.StoreMaintenance;
 import com.mrleonardos.codeeconomy.api.store.StoreResult;
 import com.mrleonardos.codeeconomy.api.store.StoreSnapshot;
 import com.mrleonardos.codeeconomy.api.store.StoreVerification;
-import com.mrleonardos.codeeconomy.internal.EconomySettings;
+import com.mrleonardos.codeeconomy.internal.EconomyConstants;
 
 /**
- * Встроенное хранилище: чекпоинт {@code accounts.json} через ConfigService ядра и append-only журнал
- * {@code journal.jsonl}, который мод ведёт сам.
+ * Встроенное хранилище: чекпоинт {@code economy-accounts.json} через ConfigService ядра и append-only
+ * журнал {@code economy-journal.jsonl}, который мод ведёт сам. Оба файла лежат в папке мира, в
+ * {@code <мир>/code/economy}, и остаются json: комментарии там некому читать, а объём и скорость разбора
+ * важнее.
  *
  * <p>
  * Журнал и есть истина: {@code apply} дописывает строку с принудительным сбросом на диск и только
@@ -52,7 +56,6 @@ import com.mrleonardos.codeeconomy.internal.EconomySettings;
 public final class JsonEconomyStore implements EconomyStore, StoreMaintenance {
 
     public static final String ID = "json";
-    public static final String JOURNAL_FILE = "journal.jsonl";
 
     private final SnapshotWriter writer;
     private final ConfigFile<JsonObject> checkpointFile;
@@ -75,8 +78,10 @@ public final class JsonEconomyStore implements EconomyStore, StoreMaintenance {
 
     public static ConfigSpec<JsonObject> spec() {
         ConfigSpec.Builder<JsonObject> builder = ConfigSpec
-            .of(EconomySettings.MODID, EconomySettings.ACCOUNTS_FILE, JsonObject.class)
+            .of(EconomyConstants.MODID, EconomyConstants.ACCOUNTS_FILE, JsonObject.class)
+            .role(ConfigRoles.ECONOMY)
             .scope(ConfigScope.WORLD_STATE)
+            .format(ConfigFormat.JSON)
             .schemaVersion(SchemaMigrations.ACCOUNTS_VERSION);
         for (Migration migration : SchemaMigrations.accountsChain()) {
             builder.migration(migration);
@@ -99,7 +104,8 @@ public final class JsonEconomyStore implements EconomyStore, StoreMaintenance {
                 "World state is not attached yet, so the journal has no path: load the world no earlier than FMLServerStartingEvent");
         }
         Path parent = checkpoint.getParent();
-        return parent == null ? Paths.get(JOURNAL_FILE) : parent.resolve(JOURNAL_FILE);
+        return parent == null ? Paths.get(EconomyConstants.JOURNAL_FILE)
+            : parent.resolve(EconomyConstants.JOURNAL_FILE);
     }
 
     /** Стартовые балансы валют: на них опирается счёт, которого журнал ещё не касался. */

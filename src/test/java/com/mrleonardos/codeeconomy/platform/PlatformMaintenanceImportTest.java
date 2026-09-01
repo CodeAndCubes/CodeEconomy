@@ -16,8 +16,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
 import com.mrleonardos.codeeconomy.api.model.ResultCode;
+import com.mrleonardos.codeeconomy.internal.EconomyConstants;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
-import com.mrleonardos.codeeconomy.internal.EconomySettings;
 import com.mrleonardos.codeeconomy.internal.TestConfigs;
 import com.mrleonardos.codeeconomy.internal.command.EconomyMessages;
 import com.mrleonardos.codeeconomy.internal.command.MaintenanceOutcome;
@@ -132,13 +132,13 @@ class PlatformMaintenanceImportTest {
     }
 
     private LedgerService service() {
-        EconomySettings config = EconomyFixtures.settings();
+        EconomyFixtures.Configs config = EconomyFixtures.configs();
         // другой тест держит в общем реестре EconomyApi чужого провайдера с именем json, поэтому
         // зовём несуществующее имя: сервис возьмёт встроенного провайдера и будет писать журнал сюда
-        config.storage.provider = "builtin-under-test";
+        config.provider = "builtin-under-test";
         TestConfigs files = new TestConfigs(root);
         return LedgerService.create(
-            config,
+            config.build(),
             Collections.singletonList(EconomyFixtures.coin()),
             files.open(JsonEconomyStore.spec()),
             new com.mrleonardos.codecore.api.util.Scheduler() {
@@ -157,6 +157,7 @@ class PlatformMaintenanceImportTest {
             () -> 0L,
             now::get,
             EconomyFixtures.lookup(),
+            new com.mrleonardos.codeeconomy.internal.event.EventDispatcher(EconomyFixtures.LOG),
             EconomyFixtures.LOG);
     }
 
@@ -171,9 +172,9 @@ class PlatformMaintenanceImportTest {
     }
 
     private Path journal() {
-        return new TestConfigs(root).worldPath("codeeconomy", "accounts")
+        return new TestConfigs(root).path(JsonEconomyStore.spec())
             .getParent()
-            .resolve("journal.jsonl");
+            .resolve(EconomyConstants.JOURNAL_FILE);
     }
 
     private String[] journalLines() throws Exception {

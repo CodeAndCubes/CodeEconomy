@@ -27,6 +27,7 @@ import com.mrleonardos.codeeconomy.api.store.CheckpointResult;
 import com.mrleonardos.codeeconomy.api.store.StoreResult;
 import com.mrleonardos.codeeconomy.api.store.StoreSnapshot;
 import com.mrleonardos.codeeconomy.api.store.StoreVerification;
+import com.mrleonardos.codeeconomy.internal.EconomyConstants;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
 import com.mrleonardos.codeeconomy.internal.TestConfigs;
 
@@ -178,7 +179,7 @@ class JsonEconomyStoreTest {
             snapshot.reason()
                 .orElse("")
                 .contains("quarantined"));
-        assertTrue(Files.exists(journalPath().resolveSibling("journal.jsonl.quarantine")));
+        assertTrue(Files.exists(journalPath().resolveSibling(EconomyConstants.JOURNAL_FILE + ".quarantine")));
         assertEquals(
             1,
             snapshot.transactions()
@@ -239,7 +240,7 @@ class JsonEconomyStoreTest {
         StoreSnapshot snapshot = store().load();
 
         assertFalse(snapshot.readOnly());
-        assertTrue(Files.exists(checkpointPath().resolveSibling("accounts.json.broken")));
+        assertTrue(Files.exists(checkpointPath().resolveSibling(checkpointPath().getFileName() + ".broken")));
         assertEquals(
             2,
             snapshot.accounts()
@@ -305,7 +306,7 @@ class JsonEconomyStoreTest {
             snapshot.reason()
                 .orElse("")
                 .contains("cannot be read"));
-        assertTrue(Files.exists(journalPath().resolveSibling("journal.jsonl.quarantine")));
+        assertTrue(Files.exists(journalPath().resolveSibling(EconomyConstants.JOURNAL_FILE + ".quarantine")));
     }
 
     /**
@@ -436,12 +437,12 @@ class JsonEconomyStoreTest {
     }
 
     private Path checkpointPath() {
-        return new TestConfigs(root).worldPath("codeeconomy", "accounts");
+        return new TestConfigs(root).path(JsonEconomyStore.spec());
     }
 
     private Path journalPath() {
         return checkpointPath().getParent()
-            .resolve("journal.jsonl");
+            .resolve(EconomyConstants.JOURNAL_FILE);
     }
 
     private JsonEconomyStore store() {

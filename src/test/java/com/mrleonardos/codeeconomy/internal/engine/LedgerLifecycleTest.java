@@ -17,8 +17,9 @@ import com.mrleonardos.codeeconomy.api.CurrencyIds;
 import com.mrleonardos.codeeconomy.api.model.ChangeCause;
 import com.mrleonardos.codeeconomy.api.model.ResultCode;
 import com.mrleonardos.codeeconomy.api.store.CheckpointResult;
+import com.mrleonardos.codeeconomy.internal.EconomyConfig;
+import com.mrleonardos.codeeconomy.internal.EconomyConstants;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
-import com.mrleonardos.codeeconomy.internal.EconomySettings;
 import com.mrleonardos.codeeconomy.internal.TestConfigs;
 import com.mrleonardos.codeeconomy.internal.store.JsonEconomyStore;
 
@@ -169,7 +170,7 @@ class LedgerLifecycleTest {
     }
 
     private Ledger ledger() {
-        EconomySettings config = EconomyFixtures.settings();
+        EconomyConfig config = EconomyFixtures.config();
         return EconomyFixtures.ledger(
             store(),
             Collections.singletonList(EconomyFixtures.coin()),
@@ -192,14 +193,14 @@ class LedgerLifecycleTest {
     }
 
     private Path journalPath() {
-        return new TestConfigs(root).worldPath("codeeconomy", "accounts")
+        return new TestConfigs(root).path(JsonEconomyStore.spec())
             .getParent()
-            .resolve("journal.jsonl");
+            .resolve(EconomyConstants.JOURNAL_FILE);
     }
 
     private String readCheckpoint() throws Exception {
         return new String(
-            Files.readAllBytes(new TestConfigs(root).worldPath("codeeconomy", "accounts")),
+            Files.readAllBytes(new TestConfigs(root).path(JsonEconomyStore.spec())),
             StandardCharsets.UTF_8);
     }
 }
