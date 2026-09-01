@@ -2,6 +2,7 @@ package com.mrleonardos.codeeconomy.internal;
 
 import java.util.List;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.IntSupplier;
 import java.util.function.LongSupplier;
 
@@ -78,25 +79,28 @@ public final class EconomyBootstrap {
     }
 
     /**
-     * Кто держит роль. Спрашивается после того, как ядро решило роли, и до того, как оно отдаёт команды
-     * стартующему серверу.
+     * Кто держит роль, и что мод делает дальше. Спрашивается после того, как ядро решило роли, и до
+     * того, как оно отдаёт команды стартующему серверу.
      *
+     * @param whenOwned корни команд, подписки на события мира и фоновый писатель: всё, что при чужом
+     *                  владельце роли не должно появиться вовсе
      * @return правда ли мод работает сам
      */
-    public boolean decide(AdapterRegistry adapters) {
+    public boolean start(AdapterRegistry adapters, Consumer<LedgerService> whenOwned) {
         owner = adapters.owner(ConfigRoles.ECONOMY);
-        if (owns()) {
+        if (!owns()) {
             log.info(
-                "Role economy is held by {}, storage provider from the main config is {}",
-                owner,
-                configs.storage(ConfigRoles.ECONOMY)
-                    .provider());
-            return true;
+                "Role economy is held by {}, CodeEconomy stands down: no commands, no journal, no checkpoint, no files",
+                owner == null ? "nobody" : owner);
+            return false;
         }
         log.info(
-            "Role economy is held by {}, CodeEconomy stands down: no commands, no journal, no checkpoint, no files",
-            owner == null ? "nobody" : owner);
-        return false;
+            "Role economy is held by {}, storage provider from the main config is {}",
+            owner,
+            configs.storage(ConfigRoles.ECONOMY)
+                .provider());
+        whenOwned.accept(service());
+        return true;
     }
 
     /** Правда ли роль осталась за нашим модом. */

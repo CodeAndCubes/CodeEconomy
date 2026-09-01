@@ -14,6 +14,7 @@ import com.mrleonardos.codecore.api.adapter.RoleServices;
 import com.mrleonardos.codecore.api.config.ConfigRoles;
 import com.mrleonardos.codecore.api.util.Scheduler;
 import com.mrleonardos.codeeconomy.api.EconomyService;
+import com.mrleonardos.codeeconomy.internal.EconomyNodes;
 import com.mrleonardos.codeeconomy.internal.EconomyRole;
 import com.mrleonardos.codeeconomy.internal.EconomySection;
 import com.mrleonardos.codeeconomy.internal.service.PlayerLookup;
@@ -30,6 +31,10 @@ import com.mrleonardos.codeeconomy.internal.service.PlayerLookup;
  * Заявка закрывает {@code balance} и {@code transfer}. Валют у чужого мода одна, журнала и топа нет
  * вовсе, поэтому {@code currencies}, {@code history} и {@code top} уходят в перечень недоступного, а не
  * притворяются работающими.
+ *
+ * <p>
+ * Того, что в перечень умений не укладывается, но админ обязан знать, при выборе владельца уходит в лог:
+ * перевод не атомарен, и личный потолок из меты не работает, потому что меты у чужого мода нет.
  */
 public final class ForgeEssentialsAdapter implements RoleAdapter {
 
@@ -91,6 +96,10 @@ public final class ForgeEssentialsAdapter implements RoleAdapter {
         log.warn(
             "Economy is served by ForgeEssentials: a transfer is a withdraw and an add without atomicity, "
                 + "without an idempotency key and without a journal, so a crash between the two loses money");
+        log.warn(
+            "Personal transfer ceiling {} does not work with this owner: ForgeEssentials keeps no meta, "
+                + "only the bounds from [economy] minTransfer and maxTransfer apply",
+            EconomyNodes.META_PAY_LIMIT);
         if (!found.ready()) {
             log.warn("ForgeEssentials economy is not up yet, its wallets answer as soon as its own module starts");
         }

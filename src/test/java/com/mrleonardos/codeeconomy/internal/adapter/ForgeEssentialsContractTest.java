@@ -18,8 +18,10 @@ import com.mrleonardos.codecore.api.util.Scheduler;
 import com.mrleonardos.codeeconomy.api.EconomyService;
 import com.mrleonardos.codeeconomy.api.EconomyServiceContract;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
+import com.mrleonardos.codeeconomy.internal.EconomyNodes;
 import com.mrleonardos.codeeconomy.internal.EconomyRole;
 import com.mrleonardos.codeeconomy.internal.EconomySection;
+import com.mrleonardos.codeeconomy.internal.RecordingLogger;
 
 /**
  * Контракт роли денег на мосте к ForgeEssentials.
@@ -97,6 +99,21 @@ class ForgeEssentialsContractTest extends EconomyServiceContract {
         assertTrue(
             service.top(service.defaultCurrencyId(), 0, 10)
                 .isEmpty());
+    }
+
+    /**
+     * Чего в перечень умений не уложить, о том мод говорит при выборе владельца: перевод не атомарен, а
+     * личный потолок из меты не работает вовсе. Молчаливая потеря личного лимита выглядит как
+     * работающая настройка, и это хуже, чем её отсутствие.
+     */
+    @Test
+    void theOwnerIsNamedTogetherWithWhatItSilentlyLoses() {
+        RecordingLogger log = new RecordingLogger();
+
+        new ForgeEssentialsAdapter(EconomySection::new, EconomyFixtures.lookup(), inline(), log.logger()).create();
+
+        assertTrue(log.anyWarnContains("without atomicity"), "перевод не атомарен");
+        assertTrue(log.anyWarnContains(EconomyNodes.META_PAY_LIMIT), "личный потолок из меты не работает");
     }
 
     /** Чужой модуль поднимается своим чередом, и до этого момента кошельков нет, а падений тоже нет. */

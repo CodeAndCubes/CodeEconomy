@@ -72,10 +72,11 @@ public final class CodeEconomyMod {
     @Mod.EventHandler
     public void postInit(FMLPostInitializationEvent event) {
         EconomyApi.freeze();
-        if (!bootstrap.decide(CodeApi.adapters())) {
-            return;
-        }
-        LedgerService service = bootstrap.service();
+        bootstrap.start(CodeApi.adapters(), this::takeTheRole);
+    }
+
+    /** Роль осталась за нами: корни команд, подписки и фоновый писатель. */
+    private void takeTheRole(LedgerService service) {
         NameResolver names = new NameResolver(
             () -> service.ledger()
                 .state()
