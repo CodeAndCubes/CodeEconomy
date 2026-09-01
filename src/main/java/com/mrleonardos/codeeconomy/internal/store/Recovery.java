@@ -130,10 +130,17 @@ public final class Recovery {
      * <p>
      * Верхняя граница {@code upToSeq} снимается вместе со счетами. Без неё сверка на живом сервере
      * ловила бы каждый {@code /pay}, прошедший пока она читала файл, и отчёт называл бы расхождением
-     * запись, которой в снимке счетов просто ещё нет.
+     * запись, которой в снимке счетов просто ещё нет. Если чекпоинт успел уйти дальше границы, сверять
+     * нечего: его счета уже новее переданных, и любое расхождение будет выдуманным.
      */
     public static StoreVerification verifyFromCheckpoint(Map<UUID, AccountView> checkpoint, long checkpointSeq,
         Path journal, Map<UUID, AccountView> current, long upToSeq, StartBalances start) {
+        if (checkpointSeq > upToSeq) {
+            return StoreVerification.voided(
+                "the checkpoint moved to seq " + checkpointSeq
+                    + " while the check was reading it, the snapshot stands at seq "
+                    + upToSeq);
+        }
         List<String> lines = lines(journal);
         if (lines == null) {
             return StoreVerification.voided("journal " + journal.getFileName() + " cannot be read, the check is void");

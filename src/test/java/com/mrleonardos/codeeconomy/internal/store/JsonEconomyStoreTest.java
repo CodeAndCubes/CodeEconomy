@@ -524,4 +524,27 @@ class JsonEconomyStoreTest {
     private static AccountView account(String owner, long amount) {
         return AccountView.of(key(owner), owner, Collections.singletonMap("coin", Long.valueOf(amount)), false, 1000L);
     }
+
+    /**
+     * Сверка идёт в фоновом потоке, а автосейв в главном: чекпоинт может уйти дальше снимка счетов,
+     * пока сверка его читает. Сравнивать новые счета со старым снимком нельзя, любое расхождение в
+     * таком сравнении выдумано.
+     */
+    @Test
+    void verifyStandsDownWhenTheCheckpointMovedPastTheSnapshot() {
+        JsonEconomyStore first = store();
+        first.apply(batch(record(1L, deposit(BOB_KEY, 30000L)), account(BOB_KEY, 30000L)));
+        StoreSnapshot state = first.load();
+
+        first.apply(batch(record(2L, deposit(CAROL_KEY, 31000L)), account(CAROL_KEY, 31000L)));
+        first.checkpoint(stateOf(2L, account(BOB_KEY, 30000L), account(CAROL_KEY, 31000L)));
+
+        StoreVerification verification = first.verify(state.accounts(), state.lastSeq());
+
+        assertTrue(verification.voided());
+        assertTrue(
+            verification.findings()
+                .get(0)
+                .contains("checkpoint moved"));
+    }
 }
