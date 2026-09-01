@@ -51,7 +51,7 @@ final class NameResolver {
                 return Optional.of(account.uuid());
             }
         }
-        return Optional.<UUID>empty();
+        return Optional.ofNullable(PlayerNames.idByName(input));
     }
 
     List<String> suggest(String partial, int limit) {
