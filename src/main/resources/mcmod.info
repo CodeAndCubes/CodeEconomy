@@ -1,0 +1,21 @@
+{
+	"modListVersion": 2,
+	"modList": [{
+		"modid": "${modId}",
+		"name": "${modName}",
+		"description": "Экономика сервера: валюты в json, журнал операций, атомарные переводы с идемпотентностью и команды /eco.",
+		"version": "${modVersion}",
+		"mcversion": "${minecraftVersion}",
+		"url": "",
+		"updateUrl": "",
+		"authorList": ["MrLeonardos"],
+		"credits": "",
+		"logoFile": "",
+		"screenshots": [],
+		"parent": "",
+		"requiredMods": ["codecore"],
+		"dependencies": ["codecore"],
+		"dependants": [],
+		"useDependencyInformation": true
+	}]
+}
