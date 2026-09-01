@@ -11,9 +11,10 @@ import java.util.List;
  * Без потолка одна команда с длинным хвостом раздувает журнал.
  *
  * <p>
- * Заводские значения это верхняя граница. Через конфиг потолки меняются только вниз:
- * {@link #loweredTo(EconomyLimits)} берёт минимум по каждому полю, поэтому поднять потолок выше
- * заводского нельзя.
+ * Заводские значения это верхняя граница. Через конфиг потолки меняются только вниз: значение выше
+ * заводского {@link Builder} зажимает до заводского, отрицательное и бессмысленное заменяет заводским
+ * и объясняет это в {@link Builder#remarks()}. Другого способа задать потолки нет, чтобы правило
+ * «только вниз» жило в одном месте.
  */
 public final class EconomyLimits {
 
@@ -70,22 +71,6 @@ public final class EconomyLimits {
         return new Builder();
     }
 
-    /**
-     * Те же потолки, ужатые до указанных.
-     *
-     * <p>
-     * По каждому полю берётся меньшее из двух значений, поэтому конфиг способен опустить потолок, но не
-     * поднять его выше заводского.
-     */
-    public EconomyLimits loweredTo(EconomyLimits requested) {
-        return new EconomyLimits(
-            Math.min(transactionIdLength, requested.transactionIdLength),
-            Math.min(reasonLength, requested.reasonLength),
-            Math.min(currencies, requested.currencies),
-            Math.min(accounts, requested.accounts),
-            Math.min(historyEntries, requested.historyEntries));
-    }
-
     /** Наибольшая длина {@code transactionId} в символах. */
     public int transactionIdLength() {
         return transactionIdLength;
@@ -119,11 +104,6 @@ public final class EconomyLimits {
     /** Вписывается ли причина в потолок по длине. */
     public boolean acceptsReason(String reason) {
         return reason != null && reason.length() <= reasonLength;
-    }
-
-    /** Правда ли число знаков после разделителя в допустимых границах. */
-    public boolean acceptsDecimals(int decimals) {
-        return decimals >= MIN_DECIMALS && decimals <= MAX_DECIMALS;
     }
 
     /**

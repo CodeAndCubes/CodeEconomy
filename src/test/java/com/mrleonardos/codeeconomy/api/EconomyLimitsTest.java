@@ -36,39 +36,6 @@ class EconomyLimitsTest {
     }
 
     @Test
-    void loweringTakesTheMinimum() {
-        EconomyLimits lowered = EconomyLimits.defaults()
-            .loweredTo(
-                EconomyLimits.builder()
-                    .transactionIdLength(16)
-                    .reasonLength(32)
-                    .currencies(2)
-                    .accounts(100)
-                    .historyEntries(10)
-                    .build());
-        assertEquals(16, lowered.transactionIdLength());
-        assertEquals(32, lowered.reasonLength());
-        assertEquals(2, lowered.currencies());
-        assertEquals(100, lowered.accounts());
-        assertEquals(10, lowered.historyEntries());
-    }
-
-    @Test
-    void raisingAboveFactoryValueChangesNothing() {
-        EconomyLimits limits = EconomyLimits.defaults();
-        EconomyLimits greedy = limits.loweredTo(
-            EconomyLimits.builder()
-                .transactionIdLength(Integer.MAX_VALUE)
-                .reasonLength(Integer.MAX_VALUE)
-                .currencies(Integer.MAX_VALUE)
-                .accounts(Integer.MAX_VALUE)
-                .historyEntries(Integer.MAX_VALUE)
-                .build());
-        assertEquals(limits, greedy);
-        assertEquals(limits.hashCode(), greedy.hashCode());
-    }
-
-    @Test
     void balanceCeilingIsCapped() {
         assertEquals(
             4611686018427387903L,
@@ -82,15 +49,6 @@ class EconomyLimitsTest {
             0L,
             EconomyLimits.defaults()
                 .capMaxBalance(0L));
-    }
-
-    @Test
-    void decimalsBoundsAreChecked() {
-        EconomyLimits limits = EconomyLimits.defaults();
-        assertTrue(limits.acceptsDecimals(0));
-        assertTrue(limits.acceptsDecimals(4));
-        assertFalse(limits.acceptsDecimals(5));
-        assertFalse(limits.acceptsDecimals(-1));
     }
 
     @Test
