@@ -16,8 +16,8 @@ import com.mrleonardos.codeeconomy.api.model.ChangeCause;
 import com.mrleonardos.codeeconomy.api.model.ResultCode;
 import com.mrleonardos.codeeconomy.api.model.TransferRequest;
 import com.mrleonardos.codeeconomy.api.store.EconomyStore;
+import com.mrleonardos.codeeconomy.internal.EconomyConfig;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
-import com.mrleonardos.codeeconomy.internal.EconomySettings;
 import com.mrleonardos.codeeconomy.internal.event.EventDispatcher;
 import com.mrleonardos.codeeconomy.internal.guard.GuardChain;
 
@@ -68,7 +68,7 @@ class LedgerBindingTest {
 
     private static Ledger ledger(java.util.function.Supplier<EconomyStore> store,
         java.util.function.Supplier<GuardChain> guards) {
-        EconomySettings config = EconomyFixtures.settings();
+        EconomyConfig config = EconomyFixtures.config();
         return new Ledger(
             store,
             Collections.singletonList(EconomyFixtures.coin()),

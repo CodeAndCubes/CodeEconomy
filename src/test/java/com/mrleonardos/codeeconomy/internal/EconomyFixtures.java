@@ -11,6 +11,10 @@ import java.util.function.LongSupplier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import com.mrleonardos.codecore.api.config.AuditSettings;
+import com.mrleonardos.codecore.api.config.ConfigService;
+import com.mrleonardos.codecore.api.config.StorageSettings;
+import com.mrleonardos.codecore.api.util.Scheduler;
 import com.mrleonardos.codeeconomy.api.CurrencyIds;
 import com.mrleonardos.codeeconomy.api.guard.TransferGuard;
 import com.mrleonardos.codeeconomy.api.model.AccountView;
@@ -25,7 +29,9 @@ import com.mrleonardos.codeeconomy.api.store.StoreSnapshot;
 import com.mrleonardos.codeeconomy.internal.engine.Ledger;
 import com.mrleonardos.codeeconomy.internal.event.EventDispatcher;
 import com.mrleonardos.codeeconomy.internal.guard.GuardChain;
+import com.mrleonardos.codeeconomy.internal.service.LedgerService;
 import com.mrleonardos.codeeconomy.internal.service.PlayerLookup;
+import com.mrleonardos.codeeconomy.internal.store.JsonEconomyStore;
 
 /** Общие предметы тестов: валюты, игроки, подставной провайдер и собранный движок. */
 public final class EconomyFixtures {
@@ -63,6 +69,39 @@ public final class EconomyFixtures {
 
     public static EconomySettings settings() {
         return new EconomySettings();
+    }
+
+    /** Настройки денег из четырёх источников: правится нужный, остальные остаются заводскими. */
+    public static Configs configs() {
+        return new Configs();
+    }
+
+    /** Заводские настройки денег целиком. */
+    public static EconomyConfig config() {
+        return configs().build();
+    }
+
+    /**
+     * Изменяемая заготовка настроек: собственный файл мода, секция главного файла и общие для линейки
+     * хранилище с журналом в логе. Тест правит то место, о котором он и написан, и собирает
+     * {@link EconomyConfig}.
+     */
+    public static final class Configs {
+
+        public final EconomySettings settings = new EconomySettings();
+        public final EconomySection section = new EconomySection();
+        public String provider = "json";
+        public int autosaveSeconds = 30;
+        public boolean logChanges = true;
+        public boolean logChecks = false;
+
+        public EconomyConfig build() {
+            return EconomyConfig.of(
+                settings,
+                section,
+                new StorageSettings(provider, autosaveSeconds),
+                new AuditSettings(logChanges, logChecks));
+        }
     }
 
     /** Справочник имён: Alice и Bob известны, Carol нет. */
@@ -134,20 +173,59 @@ public final class EconomyFixtures {
         return TransferRequest.reset(target, CurrencyIds.DEFAULT, transactionId, null, "test");
     }
 
+    /**
+     * Собранный сервис на встроенном провайдере с файлами во временной папке теста.
+     *
+     * <p>
+     * Провайдер спрашивается по несуществующему имени нарочно: общий реестр {@code EconomyApi} держит
+     * чужого провайдера с именем json, и без этого сервис забрал бы его.
+     */
+    public static LedgerService service(ConfigService configs, List<CurrencyRecord> currencies) {
+        Configs config = configs();
+        config.provider = "builtin-under-test";
+        return LedgerService.create(
+            config.build(),
+            currencies,
+            configs.open(JsonEconomyStore.spec()),
+            inlineScheduler(),
+            () -> true,
+            () -> 0L,
+            System::currentTimeMillis,
+            lookup(),
+            new EventDispatcher(LOG),
+            LOG);
+    }
+
+    /** Планировщик, который исполняет задачу на месте: тику в тесте взяться неоткуда. */
+    public static Scheduler inlineScheduler() {
+        return new Scheduler() {
+
+            @Override
+            public void onMainThread(Runnable task) {
+                task.run();
+            }
+
+            @Override
+            public void afterTicks(int ticks, Runnable task) {
+                task.run();
+            }
+        };
+    }
+
     /** Движок с подставным провайдером: запись идёт в память, файлы не трогаются. */
-    public static Ledger ledger(EconomyStore store, List<CurrencyRecord> currencies, EconomySettings config,
+    public static Ledger ledger(EconomyStore store, List<CurrencyRecord> currencies, EconomyConfig config,
         PlayerLookup lookup, LongSupplier clock) {
         return ledger(store, currencies, config, lookup, clock, LOG);
     }
 
     /** То же с подставным логгером: тесты аудита читают, что движок записал. */
-    public static Ledger ledger(EconomyStore store, List<CurrencyRecord> currencies, EconomySettings config,
+    public static Ledger ledger(EconomyStore store, List<CurrencyRecord> currencies, EconomyConfig config,
         PlayerLookup lookup, LongSupplier clock, Logger log) {
         return ledger(store, currencies, config, Collections.<TransferGuard>emptyList(), lookup, clock, log);
     }
 
     /** Движок с цепочкой гвардов: для проверок порядка и вето. */
-    public static Ledger ledger(EconomyStore store, List<CurrencyRecord> currencies, EconomySettings config,
+    public static Ledger ledger(EconomyStore store, List<CurrencyRecord> currencies, EconomyConfig config,
         List<TransferGuard> guards, PlayerLookup lookup, LongSupplier clock, Logger log) {
         Ledger ledger = new Ledger(
             () -> store,
@@ -155,7 +233,7 @@ public final class EconomyFixtures {
             config.currencyId(),
             config,
             config.ceilings(log),
-            () -> GuardChain.of(guards, config.guards.failOpen, log),
+            () -> GuardChain.of(guards, config.failOpen(), log),
             new EventDispatcher(log),
             lookup,
             clock,

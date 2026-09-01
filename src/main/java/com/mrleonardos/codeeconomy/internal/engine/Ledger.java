@@ -33,8 +33,8 @@ import com.mrleonardos.codeeconomy.api.store.StoreMaintenance;
 import com.mrleonardos.codeeconomy.api.store.StoreResult;
 import com.mrleonardos.codeeconomy.api.store.StoreSnapshot;
 import com.mrleonardos.codeeconomy.api.store.StoreVerification;
+import com.mrleonardos.codeeconomy.internal.EconomyConfig;
 import com.mrleonardos.codeeconomy.internal.EconomyNodes;
-import com.mrleonardos.codeeconomy.internal.EconomySettings;
 import com.mrleonardos.codeeconomy.internal.Lazy;
 import com.mrleonardos.codeeconomy.internal.event.EventDispatcher;
 import com.mrleonardos.codeeconomy.internal.guard.GuardChain;
@@ -84,7 +84,7 @@ public final class Ledger {
     private volatile boolean degraded;
 
     public Ledger(Supplier<EconomyStore> store, List<CurrencyRecord> currencies, String defaultCurrencyId,
-        EconomySettings config, EconomyLimits limits, Supplier<GuardChain> guards, EventDispatcher events,
+        EconomyConfig config, EconomyLimits limits, Supplier<GuardChain> guards, EventDispatcher events,
         PlayerLookup lookup, LongSupplier clock, Logger log) {
         this.store = Lazy.of(store);
         this.guards = Lazy.of(guards);
@@ -93,18 +93,18 @@ public final class Ledger {
         this.start = Currencies.startBalances(currencies);
         this.defaultCurrencyId = defaultCurrencyId;
         this.limits = limits;
-        this.minTransfer = Math.max(0L, config.limits.minTransfer);
-        this.maxTransfer = Math.max(0L, config.limits.maxTransfer);
+        this.minTransfer = Math.max(0L, config.minTransfer());
+        this.maxTransfer = Math.max(0L, config.maxTransfer());
         this.historyEntries = limits.historyEntries();
         this.historyMillis = config.historyMillis();
         this.idempotencyMillis = config.idempotencyMillis();
-        this.logChanges = config.audit.logChanges;
-        this.logChecks = config.audit.logChecks;
+        this.logChanges = config.logChanges();
+        this.logChecks = config.logChecks();
         this.events = events;
         this.lookup = lookup;
         this.clock = clock;
         this.log = log;
-        this.topIndex = new TopIndex(config.top.cacheTicks);
+        this.topIndex = new TopIndex(config.cacheTicks());
     }
 
     /** Поднять состояние из провайдера и сообщить слушателям итог восстановления. */

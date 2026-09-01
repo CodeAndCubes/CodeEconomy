@@ -22,9 +22,9 @@ import com.mrleonardos.codeeconomy.api.model.ChangeCause;
 import com.mrleonardos.codeeconomy.api.model.ResultCode;
 import com.mrleonardos.codeeconomy.api.model.TransferResult;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
-import com.mrleonardos.codeeconomy.internal.EconomySettings;
 import com.mrleonardos.codeeconomy.internal.TestConfigs;
 import com.mrleonardos.codeeconomy.internal.engine.Ledger;
+import com.mrleonardos.codeeconomy.internal.event.EventDispatcher;
 import com.mrleonardos.codeeconomy.internal.guard.PayCooldownGuard;
 import com.mrleonardos.codeeconomy.internal.store.JsonEconomyStore;
 
@@ -41,7 +41,7 @@ class LedgerServiceTest {
 
     @Test
     void mutationsFromAnotherThreadAreRefused() {
-        LedgerService service = service(EconomyFixtures.settings(), () -> false);
+        LedgerService service = service(EconomyFixtures.configs(), () -> false);
 
         assertThrows(
             IllegalStateException.class,
@@ -54,7 +54,7 @@ class LedgerServiceTest {
 
     @Test
     void submitRunsInTheNearestTickAndCompletes() {
-        LedgerService service = service(EconomyFixtures.settings(), () -> false);
+        LedgerService service = service(EconomyFixtures.configs(), () -> false);
 
         CompletableFuture<TransferResult> future = service
             .submit(EconomyFixtures.deposit(EconomyFixtures.ALICE, 300L, "shop:42"));
@@ -72,21 +72,21 @@ class LedgerServiceTest {
 
     @Test
     void cooldownGuardIsBuiltOnlyForAPositiveSetting() {
-        EconomySettings withCooldown = EconomyFixtures.settings();
-        withCooldown.limits.payCooldownSeconds = 5;
+        EconomyFixtures.Configs withCooldown = EconomyFixtures.configs();
+        withCooldown.section.payCooldownSeconds = 5;
 
-        assertTrue(containsCooldown(LedgerService.builtinGuards(withCooldown, now::get)));
+        assertTrue(containsCooldown(LedgerService.builtinGuards(withCooldown.build(), now::get)));
 
-        EconomySettings silent = EconomyFixtures.settings();
-        silent.limits.payCooldownSeconds = 0;
+        EconomyFixtures.Configs silent = EconomyFixtures.configs();
+        silent.section.payCooldownSeconds = 0;
 
-        assertFalse(containsCooldown(LedgerService.builtinGuards(silent, now::get)));
+        assertFalse(containsCooldown(LedgerService.builtinGuards(silent.build(), now::get)));
     }
 
     @Test
     void cooldownBlocksTheSecondTransferInARow() {
-        EconomySettings config = EconomyFixtures.settings();
-        config.limits.payCooldownSeconds = 60;
+        EconomyFixtures.Configs config = EconomyFixtures.configs();
+        config.section.payCooldownSeconds = 60;
         LedgerService service = service(config, () -> true);
 
         assertEquals(
@@ -117,13 +117,13 @@ class LedgerServiceTest {
                 .code());
     }
 
-    private LedgerService service(EconomySettings config, java.util.function.BooleanSupplier mainThread) {
+    private LedgerService service(EconomyFixtures.Configs config, java.util.function.BooleanSupplier mainThread) {
         // другой тест регистрирует в общем реестре EconomyApi чужого провайдера json, встроенного
         // получаем через несуществующее имя
-        config.storage.provider = "builtin-under-test";
+        config.provider = "builtin-under-test";
         TestConfigs files = new TestConfigs(root);
         return LedgerService.create(
-            config,
+            config.build(),
             Collections.singletonList(EconomyFixtures.coin()),
             files.open(JsonEconomyStore.spec()),
             scheduler(),
@@ -131,6 +131,7 @@ class LedgerServiceTest {
             tick::get,
             now::get,
             EconomyFixtures.lookup(),
+            new EventDispatcher(EconomyFixtures.LOG),
             EconomyFixtures.LOG);
     }
 
@@ -164,14 +165,14 @@ class LedgerServiceTest {
      */
     @Test
     void aRefusedWriteDoesNotStartTheCooldown() {
-        EconomySettings config = EconomyFixtures.settings();
-        config.limits.payCooldownSeconds = 60;
+        EconomyFixtures.Configs config = EconomyFixtures.configs();
+        config.section.payCooldownSeconds = 60;
         EconomyFixtures.MemoryStore store = new EconomyFixtures.MemoryStore();
         store.refuse = true;
         Ledger ledger = EconomyFixtures.ledger(
             store,
             Collections.singletonList(EconomyFixtures.coin()),
-            config,
+            config.build(),
             Collections.singletonList(new PayCooldownGuard(60, now::get)),
             EconomyFixtures.lookup(),
             now::get,

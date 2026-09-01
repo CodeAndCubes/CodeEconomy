@@ -28,7 +28,7 @@ import com.mrleonardos.codeeconomy.api.store.CheckpointResult;
 import com.mrleonardos.codeeconomy.api.store.EconomyStore;
 import com.mrleonardos.codeeconomy.api.store.StoreResult;
 import com.mrleonardos.codeeconomy.api.store.StoreVerification;
-import com.mrleonardos.codeeconomy.internal.EconomySettings;
+import com.mrleonardos.codeeconomy.internal.EconomyConfig;
 import com.mrleonardos.codeeconomy.internal.engine.Ledger;
 import com.mrleonardos.codeeconomy.internal.event.EventDispatcher;
 import com.mrleonardos.codeeconomy.internal.guard.GuardChain;
@@ -72,9 +72,9 @@ public final class LedgerService implements EconomyService {
      * бортом. Состояние мира на этот момент тоже не открыто, поэтому загрузка идёт отдельно, в
      * {@link #loadWorld()} при старте мира.
      */
-    public static LedgerService create(EconomySettings config, List<CurrencyRecord> currencies,
+    public static LedgerService create(EconomyConfig config, List<CurrencyRecord> currencies,
         ConfigFile<JsonObject> checkpointFile, Scheduler scheduler, BooleanSupplier mainThread, LongSupplier ticks,
-        LongSupplier clock, PlayerLookup lookup, Logger log) {
+        LongSupplier clock, PlayerLookup lookup, EventDispatcher events, Logger log) {
         EconomyLimits limits = config.ceilings(log);
         Ledger ledger = new Ledger(
             () -> resolveProvider(config, currencies, checkpointFile, clock, limits, log),
@@ -82,8 +82,8 @@ public final class LedgerService implements EconomyService {
             config.currencyId(),
             config,
             limits,
-            () -> GuardChain.of(builtinGuards(config, clock), config.guards.failOpen, log),
-            new EventDispatcher(log),
+            () -> GuardChain.of(builtinGuards(config, clock), config.failOpen(), log),
+            events,
             lookup,
             clock,
             log);
@@ -95,20 +95,20 @@ public final class LedgerService implements EconomyService {
      * отдельным списком, а не через {@code EconomyApi.registerGuard}, чтобы не спорить с чужими модами
      * за заморозку реестра.
      */
-    static List<TransferGuard> builtinGuards(EconomySettings config, LongSupplier clock) {
+    static List<TransferGuard> builtinGuards(EconomyConfig config, LongSupplier clock) {
         List<TransferGuard> guards = new ArrayList<>(EconomyApi.guards());
-        if (config.limits.payCooldownSeconds > 0) {
-            guards.add(new PayCooldownGuard(config.limits.payCooldownSeconds, clock));
+        if (config.payCooldownSeconds() > 0) {
+            guards.add(new PayCooldownGuard(config.payCooldownSeconds(), clock));
         }
         return guards;
     }
 
     /**
-     * Активный провайдер: зарегистрированный под именем из {@code storage.provider}, иначе встроенный
+     * Активный провайдер: зарегистрированный под именем из {@code [storage] provider}, иначе встроенный
      * json. Уход на встроенный это авария конфигурации, поэтому в лог попадает и запрошенное имя, и
      * перечень того, что вообще зарегистрировано.
      */
-    static EconomyStore resolveProvider(EconomySettings config, List<CurrencyRecord> currencies,
+    static EconomyStore resolveProvider(EconomyConfig config, List<CurrencyRecord> currencies,
         ConfigFile<JsonObject> checkpointFile, LongSupplier clock, EconomyLimits limits, Logger log) {
         String configured = config.provider();
         Optional<EconomyStore> foreign = EconomyApi.store(configured);

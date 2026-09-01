@@ -30,9 +30,9 @@ import com.mrleonardos.codeeconomy.api.store.CheckpointResult;
 import com.mrleonardos.codeeconomy.api.store.StoreResult;
 import com.mrleonardos.codeeconomy.api.store.StoreSnapshot;
 import com.mrleonardos.codeeconomy.api.store.StoreVerification;
+import com.mrleonardos.codeeconomy.internal.EconomyConfig;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
 import com.mrleonardos.codeeconomy.internal.EconomyNodes;
-import com.mrleonardos.codeeconomy.internal.EconomySettings;
 import com.mrleonardos.codeeconomy.internal.RecordingLogger;
 import com.mrleonardos.codeeconomy.internal.service.PlayerLookup;
 
@@ -316,10 +316,10 @@ class LedgerTest {
 
     @Test
     void repeatOutsideTheWindowIsAppliedWithAWarning() {
-        EconomySettings config = EconomyFixtures.settings();
-        config.history.idempotencyHours = 1;
+        EconomyFixtures.Configs config = EconomyFixtures.configs();
+        config.settings.history.idempotencyHours = 1;
         RecordingLogger log = new RecordingLogger();
-        Ledger ledger = coinLedger(config, EconomyFixtures.lookup(), log);
+        Ledger ledger = coinLedger(config.build(), EconomyFixtures.lookup(), log);
 
         ledger.execute(
             EconomyFixtures.transfer(EconomyFixtures.ALICE, EconomyFixtures.BOB, 300L, "shop:42"),
@@ -432,7 +432,7 @@ class LedgerTest {
     @Test
     void auditLineCarriesCauseActorAndTransactionId() {
         RecordingLogger log = new RecordingLogger();
-        Ledger ledger = coinLedger(EconomyFixtures.settings(), EconomyFixtures.lookup(), log);
+        Ledger ledger = coinLedger(EconomyFixtures.config(), EconomyFixtures.lookup(), log);
 
         ledger.execute(
             TransferRequest.transfer(
@@ -453,10 +453,10 @@ class LedgerTest {
 
     @Test
     void auditCanBeSilenced() {
-        EconomySettings config = EconomyFixtures.settings();
-        config.audit.logChanges = false;
+        EconomyFixtures.Configs config = EconomyFixtures.configs();
+        config.logChanges = false;
         RecordingLogger log = new RecordingLogger();
-        Ledger ledger = coinLedger(config, EconomyFixtures.lookup(), log);
+        Ledger ledger = coinLedger(config.build(), EconomyFixtures.lookup(), log);
 
         ledger.execute(
             EconomyFixtures.transfer(EconomyFixtures.ALICE, EconomyFixtures.BOB, 300L, "tx1"),
@@ -468,17 +468,17 @@ class LedgerTest {
     @Test
     void refusalsAreExplainedOnlyWithLogChecks() {
         RecordingLogger silent = new RecordingLogger();
-        Ledger withoutChecks = coinLedger(EconomyFixtures.settings(), EconomyFixtures.lookup(), silent);
+        Ledger withoutChecks = coinLedger(EconomyFixtures.config(), EconomyFixtures.lookup(), silent);
         withoutChecks.execute(
             EconomyFixtures.transfer(EconomyFixtures.ALICE, EconomyFixtures.BOB, 10L, "tx1"),
             ChangeCause.COMMAND);
 
         assertFalse(silent.anyDebugContains("is refused with"), "по умолчанию отказы на уровне debug не пишутся");
 
-        EconomySettings config = EconomyFixtures.settings();
-        config.audit.logChecks = true;
+        EconomyFixtures.Configs config = EconomyFixtures.configs();
+        config.logChecks = true;
         RecordingLogger loud = new RecordingLogger();
-        Ledger withChecks = coinLedger(config, EconomyFixtures.lookup(), loud);
+        Ledger withChecks = coinLedger(config.build(), EconomyFixtures.lookup(), loud);
         withChecks.execute(
             EconomyFixtures.transfer(EconomyFixtures.ALICE, EconomyFixtures.BOB, 30000L, "tx2"),
             ChangeCause.COMMAND);
@@ -586,17 +586,17 @@ class LedgerTest {
         store.snapshot = StoreSnapshot.of(state, 0L, Collections.<TransactionRecord>emptyList());
         return assembled(
             EconomyFixtures.currencies(EconomyFixtures.coin()),
-            EconomyFixtures.settings(),
+            EconomyFixtures.config(),
             EconomyFixtures.lookup(),
             EconomyFixtures.LOG);
     }
 
-    private Ledger coinLedger(EconomySettings config, PlayerLookup lookup, RecordingLogger log) {
+    private Ledger coinLedger(EconomyConfig config, PlayerLookup lookup, RecordingLogger log) {
         return assembled(EconomyFixtures.currencies(EconomyFixtures.coin()), config, lookup, log.logger());
     }
 
     private Ledger coinLedger(Map<UUID, Map<String, String>> meta, RecordingLogger log) {
-        return coinLedger(EconomyFixtures.settings(), EconomyFixtures.lookupWithMeta(meta), log);
+        return coinLedger(EconomyFixtures.config(), EconomyFixtures.lookupWithMeta(meta), log);
     }
 
     private Ledger creditLedger(PlayerLookup lookup) {
@@ -608,7 +608,7 @@ class LedgerTest {
             Collections.singletonMap(EconomyFixtures.ALICE, account(CREDIT, EconomyFixtures.ALICE, 100L)),
             0L,
             Collections.<TransactionRecord>emptyList());
-        return assembled(EconomyFixtures.currencies(EconomyFixtures.credit()), EconomyFixtures.settings(), lookup, log);
+        return assembled(EconomyFixtures.currencies(EconomyFixtures.credit()), EconomyFixtures.config(), lookup, log);
     }
 
     private Ledger creditLedger(PlayerLookup lookup, RecordingLogger log) {
@@ -621,7 +621,7 @@ class LedgerTest {
         return EconomyFixtures.ledger(
             store,
             EconomyFixtures.currencies(EconomyFixtures.credit()),
-            EconomyFixtures.settings(),
+            EconomyFixtures.config(),
             EconomyFixtures.lookup(),
             now::get,
             EconomyFixtures.LOG);
@@ -630,12 +630,12 @@ class LedgerTest {
     private Ledger rebuilt() {
         return assembled(
             EconomyFixtures.currencies(EconomyFixtures.coin()),
-            EconomyFixtures.settings(),
+            EconomyFixtures.config(),
             EconomyFixtures.lookup(),
             EconomyFixtures.LOG);
     }
 
-    private Ledger assembled(List<CurrencyRecord> currencies, EconomySettings config, PlayerLookup lookup, Logger log) {
+    private Ledger assembled(List<CurrencyRecord> currencies, EconomyConfig config, PlayerLookup lookup, Logger log) {
         return EconomyFixtures.ledger(store, currencies, config, lookup, now::get, log);
     }
 
@@ -773,11 +773,11 @@ class LedgerTest {
      */
     @Test
     void verifyWithoutAJournalAndWithoutAFullHistorySaysSo() {
-        EconomySettings config = EconomyFixtures.settings();
-        config.history.maxEntries = 1;
+        EconomyFixtures.Configs config = EconomyFixtures.configs();
+        config.settings.history.maxEntries = 1;
         Ledger ledger = assembled(
             EconomyFixtures.currencies(EconomyFixtures.coin()),
-            config,
+            config.build(),
             EconomyFixtures.lookup(),
             EconomyFixtures.LOG);
         ledger.execute(EconomyFixtures.deposit(EconomyFixtures.ALICE, 100L, "tx1"), ChangeCause.COMMAND);
