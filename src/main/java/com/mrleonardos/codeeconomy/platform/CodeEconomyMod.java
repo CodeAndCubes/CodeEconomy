@@ -30,7 +30,7 @@ import cpw.mods.fml.common.Mod;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
-import cpw.mods.fml.common.event.FMLServerAboutToStartEvent;
+import cpw.mods.fml.common.event.FMLServerStartingEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 
 @Mod(
@@ -122,7 +122,7 @@ public final class CodeEconomyMod {
     }
 
     @Mod.EventHandler
-    public void serverAboutToStart(FMLServerAboutToStartEvent event) {
+    public void serverStarting(FMLServerStartingEvent event) {
         mainThread.attach(Thread.currentThread());
         lifecycle.onServerStart();
     }

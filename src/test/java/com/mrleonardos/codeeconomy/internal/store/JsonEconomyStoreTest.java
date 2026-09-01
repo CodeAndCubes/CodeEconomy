@@ -3,6 +3,7 @@ package com.mrleonardos.codeeconomy.internal.store;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -16,6 +17,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.google.gson.JsonObject;
+import com.mrleonardos.codecore.api.config.ConfigFile;
 import com.mrleonardos.codeeconomy.api.model.AccountView;
 import com.mrleonardos.codeeconomy.api.model.ChangeCause;
 import com.mrleonardos.codeeconomy.api.model.TransactionRecord;
@@ -546,5 +549,44 @@ class JsonEconomyStoreTest {
             verification.findings()
                 .get(0)
                 .contains("checkpoint moved"));
+    }
+
+    /**
+     * Мир привязывается к конфигам состояния мира позже, чем поднимается сервер, и до этого путь файла
+     * равен null. Загрузка на слишком раннем событии раньше давала NPE и роняла старт сервера целиком,
+     * поэтому здесь ждём внятный отказ с указанием нужного события.
+     */
+    @Test
+    void journalPathRefusesUntilTheWorldIsAttached() {
+        ConfigFile<JsonObject> detached = new ConfigFile<JsonObject>() {
+
+            @Override
+            public JsonObject get() {
+                return new JsonObject();
+            }
+
+            @Override
+            public boolean loaded() {
+                return false;
+            }
+
+            @Override
+            public void save() {}
+
+            @Override
+            public void reload() {}
+
+            @Override
+            public Path path() {
+                return null;
+            }
+        };
+
+        IllegalStateException refusal = assertThrows(
+            IllegalStateException.class,
+            () -> JsonEconomyStore.journalPath(detached));
+        assertTrue(
+            refusal.getMessage()
+                .contains("FMLServerStartingEvent"));
     }
 }

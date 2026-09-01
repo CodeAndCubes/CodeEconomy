@@ -93,8 +93,12 @@ public final class JsonEconomyStore implements EconomyStore, StoreMaintenance {
     }
 
     public static Path journalPath(ConfigFile<JsonObject> checkpointFile) {
-        Path parent = checkpointFile.path()
-            .getParent();
+        Path checkpoint = checkpointFile.path();
+        if (checkpoint == null) {
+            throw new IllegalStateException(
+                "World state is not attached yet, so the journal has no path: load the world no earlier than FMLServerStartingEvent");
+        }
+        Path parent = checkpoint.getParent();
         return parent == null ? Paths.get(JOURNAL_FILE) : parent.resolve(JOURNAL_FILE);
     }
 
