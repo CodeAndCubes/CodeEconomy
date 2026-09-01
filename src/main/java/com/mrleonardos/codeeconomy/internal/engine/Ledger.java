@@ -161,11 +161,6 @@ public final class Ledger {
         return guards.get();
     }
 
-    /** Имя активного провайдера: для строки в логе и для отчёта администратору. */
-    public String providerId() {
-        return store().id();
-    }
-
     public List<CurrencyRecord> currencies() {
         return currencyList;
     }
@@ -240,12 +235,17 @@ public final class Ledger {
             .size() < historyEntries
             && (historyMillis <= 0L || current.history()
                 .oldestTs() >= clock.getAsLong() - historyMillis);
+        if (!complete) {
+            return StoreVerification.voided(
+                "provider " + store().id()
+                    + " offers no journal to check and the in-memory history is partial, nothing to compare against");
+        }
         List<String> findings = Recovery.verify(
             current.accounts(),
             current.history()
                 .records(),
             start,
-            complete);
+            true);
         return StoreVerification.of(findings, 0L, 0L, 0L);
     }
 

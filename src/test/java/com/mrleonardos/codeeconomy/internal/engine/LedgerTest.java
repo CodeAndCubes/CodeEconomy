@@ -26,7 +26,10 @@ import com.mrleonardos.codeeconomy.api.model.ResultCode;
 import com.mrleonardos.codeeconomy.api.model.TransactionRecord;
 import com.mrleonardos.codeeconomy.api.model.TransferRequest;
 import com.mrleonardos.codeeconomy.api.model.TransferResult;
+import com.mrleonardos.codeeconomy.api.store.CheckpointResult;
+import com.mrleonardos.codeeconomy.api.store.StoreResult;
 import com.mrleonardos.codeeconomy.api.store.StoreSnapshot;
+import com.mrleonardos.codeeconomy.api.store.StoreVerification;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
 import com.mrleonardos.codeeconomy.internal.EconomyNodes;
 import com.mrleonardos.codeeconomy.internal.EconomySettings;
@@ -693,5 +696,98 @@ class LedgerTest {
             text.append(symbol);
         }
         return text.toString();
+    }
+
+    /**
+     * Провайдер без обслуживания сам держит состояние в одном месте: чекпоинт для него это полная
+     * выгрузка через save. Раньше движок ходил во встроенный json мимо активного провайдера и отвечал
+     * успехом, не спросив его ни разу.
+     */
+    @Test
+    void checkpointOnAProviderWithoutMaintenanceGoesThroughSave() {
+        Ledger ledger = coinLedger(account(COIN, EconomyFixtures.ALICE, 1000L));
+        ledger.execute(EconomyFixtures.deposit(EconomyFixtures.ALICE, 100L, "tx1"), ChangeCause.COMMAND);
+
+        CheckpointResult written = ledger.checkpoint();
+
+        assertTrue(written.successful());
+        assertTrue(written.written());
+        assertEquals(1, store.saved, "снимок ушёл активному провайдеру");
+        assertEquals(
+            ledger.state()
+                .lastSeq(),
+            written.seq());
+    }
+
+    @Test
+    void checkpointReportsTheRefusalOfAForeignProvider() {
+        Ledger ledger = coinLedger(account(COIN, EconomyFixtures.ALICE, 1000L));
+        ledger.execute(EconomyFixtures.deposit(EconomyFixtures.ALICE, 100L, "tx1"), ChangeCause.COMMAND);
+        store.refuseSave = true;
+
+        CheckpointResult written = ledger.checkpoint();
+
+        assertFalse(written.successful(), "отказ провайдера не подменяется успехом");
+        assertEquals(
+            StoreResult.Failure.UNSUPPORTED,
+            written.result()
+                .failure()
+                .get());
+    }
+
+    /** Провайдеру, который фиксирует операцию в apply, автосейву сохранять нечего. */
+    @Test
+    void autosaveAsksNothingOfAProviderWithoutMaintenance() {
+        Ledger ledger = coinLedger(account(COIN, EconomyFixtures.ALICE, 1000L));
+        ledger.execute(EconomyFixtures.deposit(EconomyFixtures.ALICE, 100L, "tx1"), ChangeCause.COMMAND);
+
+        ledger.autosave();
+
+        assertEquals(0, store.saved);
+    }
+
+    /**
+     * Сверка для провайдера без обслуживания идёт по кольцевой истории в памяти. Эта ветка была
+     * недостижима, пока движок спрашивал встроенный json вместо активного провайдера.
+     */
+    @Test
+    void verifyOnAProviderWithoutMaintenanceReplaysTheRingHistory() {
+        Ledger ledger = coinLedger();
+        ledger.execute(EconomyFixtures.deposit(EconomyFixtures.ALICE, 100L, "tx1"), ChangeCause.COMMAND);
+        ledger.execute(
+            EconomyFixtures.transfer(EconomyFixtures.ALICE, EconomyFixtures.BOB, 100L, "tx2"),
+            ChangeCause.COMMAND);
+
+        StoreVerification verification = ledger.verifyDetailed();
+
+        assertFalse(verification.voided(), "вся история в памяти, сверять есть что");
+        assertTrue(
+            verification.findings()
+                .isEmpty(),
+            "журнал и балансы сходятся");
+    }
+
+    /**
+     * История в памяти обрезана, а журнала у провайдера нет: сверять нечем. Пустой отчёт администратор
+     * прочтёт как «всё сошлось», поэтому сверка честно говорит, что не состоялась.
+     */
+    @Test
+    void verifyWithoutAJournalAndWithoutAFullHistorySaysSo() {
+        EconomySettings config = EconomyFixtures.settings();
+        config.history.maxEntries = 1;
+        Ledger ledger = assembled(
+            EconomyFixtures.currencies(EconomyFixtures.coin()),
+            config,
+            EconomyFixtures.lookup(),
+            EconomyFixtures.LOG);
+        ledger.execute(EconomyFixtures.deposit(EconomyFixtures.ALICE, 100L, "tx1"), ChangeCause.COMMAND);
+
+        StoreVerification verification = ledger.verifyDetailed();
+
+        assertTrue(verification.voided());
+        assertTrue(
+            verification.findings()
+                .get(0)
+                .contains("nothing to compare"));
     }
 }

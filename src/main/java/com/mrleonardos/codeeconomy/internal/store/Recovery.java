@@ -136,8 +136,7 @@ public final class Recovery {
         Path journal, Map<UUID, AccountView> current, long upToSeq, StartBalances start) {
         List<String> lines = lines(journal);
         if (lines == null) {
-            return StoreVerification
-                .unreadable("journal " + journal.getFileName() + " cannot be read, the check is void");
+            return StoreVerification.voided("journal " + journal.getFileName() + " cannot be read, the check is void");
         }
         Replay replay = new Replay(checkpoint, start);
         long settled = 0L;

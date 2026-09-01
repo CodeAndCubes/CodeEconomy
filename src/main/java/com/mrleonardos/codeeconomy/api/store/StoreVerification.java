@@ -19,14 +19,14 @@ public final class StoreVerification {
     private final long settled;
     private final long ahead;
     private final long damaged;
-    private final boolean unreadable;
+    private final boolean voided;
 
-    private StoreVerification(List<String> findings, long settled, long ahead, long damaged, boolean unreadable) {
+    private StoreVerification(List<String> findings, long settled, long ahead, long damaged, boolean voided) {
         this.findings = Collections.unmodifiableList(new ArrayList<>(findings));
         this.settled = settled;
         this.ahead = ahead;
         this.damaged = damaged;
-        this.unreadable = unreadable;
+        this.voided = voided;
     }
 
     /**
@@ -42,10 +42,18 @@ public final class StoreVerification {
         return new StoreVerification(findings, settled, ahead, damaged, false);
     }
 
-    /** Сверка не состоялась: носитель не читается. */
-    public static StoreVerification unreadable(String reason) {
-        Objects.requireNonNull(reason, "reason");
-        return new StoreVerification(Collections.singletonList(reason), 0L, 0L, 0L, true);
+    /**
+     * Сверка не состоялась: носитель не читается или сверять его нечем.
+     *
+     * <p>
+     * Отвечать пустым списком расхождений в таком случае нельзя: администратор прочтёт это как «всё
+     * сошлось» и уйдёт с уверенностью, которой сверка не давала.
+     *
+     * @param whyNot что помешало, попадает в отчёт
+     */
+    public static StoreVerification voided(String whyNot) {
+        Objects.requireNonNull(whyNot, "whyNot");
+        return new StoreVerification(Collections.singletonList(whyNot), 0L, 0L, 0L, true);
     }
 
     /** Расхождения между носителем и счетами. */
@@ -68,9 +76,9 @@ public final class StoreVerification {
         return damaged;
     }
 
-    /** Правда ли носитель не читается: тогда сверка ничего не доказывает. */
-    public boolean unreadable() {
-        return unreadable;
+    /** Правда ли сверка не состоялась: тогда пустой список расхождений ничего не доказывает. */
+    public boolean voided() {
+        return voided;
     }
 
     @Override

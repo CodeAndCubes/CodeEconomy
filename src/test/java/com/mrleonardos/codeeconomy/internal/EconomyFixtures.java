@@ -170,6 +170,7 @@ public final class EconomyFixtures {
         public final List<ChangeBatch> applied = new java.util.ArrayList<>();
         public StoreSnapshot snapshot = StoreSnapshot.empty();
         public boolean refuse;
+        public boolean refuseSave;
         public boolean throwOnApply;
         public int saved;
 
@@ -198,6 +199,9 @@ public final class EconomyFixtures {
 
         @Override
         public StoreResult save(StoreSnapshot savedSnapshot) {
+            if (refuseSave) {
+                return StoreResult.failure(StoreResult.Failure.UNSUPPORTED, "save is not supported by memory");
+            }
             saved++;
             snapshot = savedSnapshot;
             return StoreResult.success();

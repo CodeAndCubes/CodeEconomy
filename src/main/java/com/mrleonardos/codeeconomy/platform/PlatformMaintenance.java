@@ -77,6 +77,13 @@ final class PlatformMaintenance implements EconomyMaintenance {
     public MaintenanceOutcome verify() {
         verifier.execute(() -> {
             StoreVerification verification = service.verifyDetailed();
+            if (verification.voided()) {
+                log.warn(
+                    "Economy verify did not run: {}",
+                    verification.findings()
+                        .get(0));
+                return;
+            }
             for (String finding : verification.findings()) {
                 log.warn("Economy verify: {}", finding);
             }
