@@ -24,7 +24,7 @@ class BalanceImportersTest {
 
     @Test
     void flatJsonMapsUuidsToMinorUnits() throws Exception {
-        Path source = write("import.json", "{\"" + ALICE + "\": 12.50, \"" + BOB + "\": 100}");
+        Path source = write("import.json", "{\"" + ALICE + "\": 1250, \"" + BOB + "\": 100}");
 
         BalanceImporters.Imported imported = BalanceImporters
             .read(BalanceImporters.FLAT_JSON, source, EconomyFixtures.coin(), EconomyLimits.defaults());
@@ -34,9 +34,10 @@ class BalanceImportersTest {
             imported.accepted()
                 .get(uuid(ALICE)));
         assertEquals(
-            Long.valueOf(10000L),
+            Long.valueOf(100L),
             imported.accepted()
-                .get(uuid(BOB)));
+                .get(uuid(BOB)),
+            "flatjson несёт минорные единицы, множителя 10^decimals тут нет");
         assertTrue(
             imported.rejected()
                 .isEmpty());
@@ -61,7 +62,7 @@ class BalanceImportersTest {
             imported.accepted()
                 .size());
         assertEquals(
-            Long.valueOf(10000L),
+            Long.valueOf(100L),
             imported.accepted()
                 .get(uuid(BOB)));
         assertEquals(

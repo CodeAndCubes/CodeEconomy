@@ -49,11 +49,6 @@ public final class ChangeBatch {
         return records;
     }
 
-    /** Пустых пачек не бывает, поэтому проверка нужна только для подстраховки. */
-    public boolean isEmpty() {
-        return upserts.isEmpty() && records.isEmpty();
-    }
-
     @Override
     public boolean equals(Object other) {
         if (this == other) {

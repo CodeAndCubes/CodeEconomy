@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
 import org.apache.logging.log4j.Logger;
@@ -26,15 +27,19 @@ import com.mrleonardos.codeeconomy.api.model.TransactionRecord;
 import com.mrleonardos.codeeconomy.api.model.TransferRequest;
 import com.mrleonardos.codeeconomy.api.model.TransferResult;
 import com.mrleonardos.codeeconomy.api.store.ChangeBatch;
+import com.mrleonardos.codeeconomy.api.store.CheckpointResult;
 import com.mrleonardos.codeeconomy.api.store.EconomyStore;
+import com.mrleonardos.codeeconomy.api.store.StoreMaintenance;
 import com.mrleonardos.codeeconomy.api.store.StoreResult;
 import com.mrleonardos.codeeconomy.api.store.StoreSnapshot;
+import com.mrleonardos.codeeconomy.api.store.StoreVerification;
 import com.mrleonardos.codeeconomy.internal.EconomyNodes;
 import com.mrleonardos.codeeconomy.internal.EconomySettings;
+import com.mrleonardos.codeeconomy.internal.Lazy;
 import com.mrleonardos.codeeconomy.internal.event.EventDispatcher;
 import com.mrleonardos.codeeconomy.internal.guard.GuardChain;
 import com.mrleonardos.codeeconomy.internal.service.PlayerLookup;
-import com.mrleonardos.codeeconomy.internal.store.JsonEconomyStore;
+import com.mrleonardos.codeeconomy.internal.store.Currencies;
 import com.mrleonardos.codeeconomy.internal.store.Recovery;
 
 /**
@@ -44,11 +49,17 @@ import com.mrleonardos.codeeconomy.internal.store.Recovery;
  * Порядок шагов фиксированный: разбор запроса, идемпотентность, стороны и заморозка, потолки и пол,
  * гварды, запись в хранилище, коммит снимка, события. Каждый отказ стоит до первой записи, поэтому
  * частичное списание невозможно по построению: перевод это одна строка журнала, а не два действия.
+ *
+ * <p>
+ * Провайдер и цепочка гвардов берутся по первому обращению, а не в конструкторе: реестры
+ * {@code EconomyApi} открыты всю фазу инициализации, и мод, загруженный после codeeconomy, обязан
+ * успеть в них попасть. Всё, что провайдер умеет сверх записи, спрашивается у него самого через
+ * {@link StoreMaintenance}: встроенного json движок по имени не знает.
  */
 public final class Ledger {
 
-    private final EconomyStore store;
-    private final JsonEconomyStore builtin;
+    private final Lazy<EconomyStore> store;
+    private final Lazy<GuardChain> guards;
     private final List<CurrencyRecord> currencyList;
     private final Map<String, CurrencyRecord> currencies;
     private final Recovery.StartBalances start;
@@ -61,7 +72,6 @@ public final class Ledger {
     private final long idempotencyMillis;
     private final boolean logChanges;
     private final boolean logChecks;
-    private final GuardChain guards;
     private final EventDispatcher events;
     private final PlayerLookup lookup;
     private final LongSupplier clock;
@@ -73,14 +83,14 @@ public final class Ledger {
     private volatile boolean readOnly;
     private volatile boolean degraded;
 
-    public Ledger(EconomyStore store, JsonEconomyStore builtin, List<CurrencyRecord> currencies,
-        String defaultCurrencyId, EconomySettings config, EconomyLimits limits, GuardChain guards,
-        EventDispatcher events, PlayerLookup lookup, LongSupplier clock, Logger log) {
-        this.store = store;
-        this.builtin = builtin;
+    public Ledger(Supplier<EconomyStore> store, List<CurrencyRecord> currencies, String defaultCurrencyId,
+        EconomySettings config, EconomyLimits limits, Supplier<GuardChain> guards, EventDispatcher events,
+        PlayerLookup lookup, LongSupplier clock, Logger log) {
+        this.store = Lazy.of(store);
+        this.guards = Lazy.of(guards);
         this.currencyList = Collections.unmodifiableList(new ArrayList<>(currencies));
-        this.currencies = byId(currencies);
-        this.start = starting(currencies);
+        this.currencies = Currencies.byId(currencies);
+        this.start = Currencies.startBalances(currencies);
         this.defaultCurrencyId = defaultCurrencyId;
         this.limits = limits;
         this.minTransfer = Math.max(0L, config.limits.minTransfer);
@@ -90,7 +100,6 @@ public final class Ledger {
         this.idempotencyMillis = config.idempotencyMillis();
         this.logChanges = config.audit.logChanges;
         this.logChecks = config.audit.logChecks;
-        this.guards = guards;
         this.events = events;
         this.lookup = lookup;
         this.clock = clock;
@@ -98,7 +107,12 @@ public final class Ledger {
         this.topIndex = new TopIndex(config.top.cacheTicks);
     }
 
-    /** Поднять состояние из снимка провайдера и сообщить слушателям итог восстановления. */
+    /** Поднять состояние из провайдера и сообщить слушателям итог восстановления. */
+    public void loadWorld() {
+        start(store().load());
+    }
+
+    /** Принять готовый снимок: вход для тестов и для провайдера, загруженного отдельно. */
     public void start(StoreSnapshot snapshot) {
         LedgerState loaded = LedgerState
             .of(snapshot.accounts(), snapshot.checkpointSeq(), snapshot.transactions(), historyEntries);
@@ -111,18 +125,20 @@ public final class Ledger {
                 replayed++;
             }
         }
-        List<String> findings = builtin == null ? Collections.<String>emptyList() : builtin.lastFindings();
         log.info(
             "Economy is served by provider {} with {} account(s), checkpoint {}, {} journal record(s) replayed, {} mismatch(es){}",
-            store.id(),
+            store().id(),
             Integer.valueOf(
                 loaded.accounts()
                     .size()),
             Long.valueOf(snapshot.checkpointSeq()),
             Integer.valueOf(replayed),
-            Integer.valueOf(findings.size()),
-            snapshot.readOnly() ? ", the mod is read only" : "");
-        events.recovery(RecoveryEvent.of(snapshot.checkpointSeq(), replayed, findings));
+            Integer.valueOf(
+                snapshot.findings()
+                    .size()),
+            snapshot.readOnly() ? ", the mod is read only: " + snapshot.reason()
+                .orElse("") : "");
+        events.recovery(RecoveryEvent.of(snapshot.checkpointSeq(), replayed, snapshot.findings()));
     }
 
     public LedgerState state() {
@@ -142,7 +158,12 @@ public final class Ledger {
     }
 
     public GuardChain guards() {
-        return guards;
+        return guards.get();
+    }
+
+    /** Имя активного провайдера: для строки в логе и для отчёта администратору. */
+    public String providerId() {
+        return store().id();
     }
 
     public List<CurrencyRecord> currencies() {
@@ -172,27 +193,48 @@ public final class Ledger {
     }
 
     public List<BalanceEntry> top(String currencyId, int page, int pageSize, long tick) {
-        return topIndex.top(currencyId, state.accounts(), page, pageSize, tick);
+        CurrencyRecord currency = currencies.get(currencyId);
+        if (currency == null) {
+            return Collections.emptyList();
+        }
+        return topIndex.top(currency.id(), currency.startBalance(), state.accounts(), page, pageSize, tick);
     }
 
     /**
      * Провести операцию через конвейер. Вызывается только в главном потоке, за этим следит
      * {@code LedgerService}. Отказ носителя отвечает {@code STORE_FAILURE}, остальное либо код отказа,
      * либо исключение вызывающему: подмена ответа на хранилище скрыла бы настоящую причину.
+     *
+     * <p>
+     * Пол баланса решает нода {@code codeeconomy.bypass.minbalance} у автора операции. Операция без
+     * автора идёт по обычному полу: пустой {@code actor} ставит кто угодно, и раздавать по нему право
+     * уводить чужие счета в минус нельзя.
      */
     public TransferResult execute(TransferRequest request, ChangeCause cause) {
-        return pipeline(request, cause);
+        return pipeline(request, cause, null);
     }
 
     /**
-     * Сверка журнала с текущим состоянием, безопасна в фоновом потоке: работает по снимку. Встроенный
-     * провайдер сверяет от чекпоинта по файлу журнала, чужой провайдер отдаёт только построчную
-     * сверку, а итог сравнивается когда история полная.
+     * Та же операция с уже решённым обходом пола.
+     *
+     * <p>
+     * Вход для команд: право отправителя там спрашивает шов команд через {@code PermissionService}
+     * ядра, и для консоли, у которой нет uuid, это единственный способ ответить честно.
      */
-    public Recovery.Verification verifyDetailed() {
+    public TransferResult execute(TransferRequest request, ChangeCause cause, boolean floorBypass) {
+        return pipeline(request, cause, Boolean.valueOf(floorBypass));
+    }
+
+    /**
+     * Сверка состояния с носителем, безопасна в фоновом потоке: работает по снимку. Провайдер с
+     * обслуживанием сверяет по своему носителю от чекпоинта, остальные отдают построчную сверку
+     * кольцевой истории, а итог сравнивается только когда история полная.
+     */
+    public StoreVerification verifyDetailed() {
         LedgerState current = state;
-        if (builtin != null) {
-            return builtin.verify(current.accounts());
+        StoreMaintenance keeper = maintenance();
+        if (keeper != null) {
+            return keeper.verify(current.accounts(), current.lastSeq());
         }
         boolean complete = current.checkpointSeq() == 0L && current.history()
             .size() < historyEntries
@@ -204,24 +246,26 @@ public final class Ledger {
                 .records(),
             start,
             complete);
-        return new Recovery.Verification(findings, 0L, false);
-    }
-
-    /** Расхождения сверки, отчёт обслуживает {@code verifyDetailed}. */
-    public List<String> verify() {
-        return verifyDetailed().findings();
+        return StoreVerification.of(findings, 0L, 0L, 0L);
     }
 
     /** Принудительный снимок: чекпоинт записывается сейчас, журнал не трогается. */
-    public StoreResult checkpoint() {
+    public CheckpointResult checkpoint() {
         if (readOnly) {
-            return StoreResult.failure(StoreResult.Failure.WRITE_FAILED, "the mod is read only");
+            return CheckpointResult
+                .failure(StoreResult.failure(StoreResult.Failure.WRITE_FAILED, "the mod is read only"));
         }
-        if (builtin != null) {
-            builtin.flushCheckpoint();
-            return StoreResult.success();
+        LedgerState current = state;
+        StoreMaintenance keeper = maintenance();
+        if (keeper == null) {
+            StoreResult stored = save(current);
+            return stored.successful() ? CheckpointResult.written(current.lastSeq()) : CheckpointResult.failure(stored);
         }
-        return save(state());
+        CheckpointResult written = keeper.checkpoint(snapshotOf(current));
+        if (written.successful()) {
+            state = current.withCheckpoint(written.seq());
+        }
+        return written;
     }
 
     /** Свежий чекпоинт и обрезка журнала. */
@@ -229,7 +273,28 @@ public final class Ledger {
         if (readOnly) {
             return StoreResult.failure(StoreResult.Failure.WRITE_FAILED, "the mod is read only");
         }
-        return save(state());
+        return save(state);
+    }
+
+    /**
+     * Снять признак карантина и открыть мутации.
+     *
+     * <p>
+     * Признак стоит в состоянии мира и переживает перезапуск, поэтому снять его может только человек,
+     * разобравшийся с потерянными записями.
+     */
+    public StoreResult liftReadOnly() {
+        StoreMaintenance keeper = maintenance();
+        if (keeper == null) {
+            return StoreResult
+                .failure(StoreResult.Failure.UNSUPPORTED, "provider " + store().id() + " keeps no quarantine mark");
+        }
+        StoreResult lifted = keeper.liftReadOnly();
+        if (lifted.successful()) {
+            readOnly = false;
+            log.warn("The read only mode is lifted by an administrator, mutations are open again");
+        }
+        return lifted;
     }
 
     /** Отметить последний известный ник на существующем счёте: журнал не пишется, счёт не создаётся. */
@@ -239,7 +304,8 @@ public final class Ledger {
         }
         return amend(
             player,
-            account -> AccountView.of(account.uuid(), name, account.balances(), account.frozen(), account.createdAt()));
+            account -> AccountView.of(account.uuid(), name, account.balances(), account.frozen(), account.createdAt()),
+            false);
     }
 
     /** Заморозить или разморозить существующий счёт: движение закрыто в обе стороны. */
@@ -252,10 +318,20 @@ public final class Ledger {
                     .orElse(null),
                 account.balances(),
                 frozen,
-                account.createdAt()));
+                account.createdAt()),
+            true);
     }
 
-    private StoreResult amend(UUID player, UnaryOperator<AccountView> change) {
+    /**
+     * Правка счёта без движения денег.
+     *
+     * @param durable писать ли чекпоинт немедленно. Заморозка обязана пережить падение процесса, и это
+     *                редкая команда администратора. Отметка ника идёт на каждом входе игрока, ей
+     *                хватает ближайшего автосейва: полная перезапись файла на каждый вход это лаг тика
+     *                за то, что и так восстановится по журналу. Провайдеру без обслуживания просить
+     *                нечего: его {@code apply} уже зафиксировал правку.
+     */
+    private StoreResult amend(UUID player, UnaryOperator<AccountView> change, boolean durable) {
         if (readOnly) {
             return StoreResult.failure(StoreResult.Failure.WRITE_FAILED, "the mod is read only");
         }
@@ -281,33 +357,75 @@ public final class Ledger {
         Map<UUID, AccountView> accounts = new LinkedHashMap<>(current.accounts());
         accounts.put(player, updated);
         state = current.withAccounts(accounts);
-        if (builtin != null) {
-            builtin.flushCheckpoint();
+        if (durable && maintenance() != null) {
+            CheckpointResult written = checkpoint();
+            if (!written.successful()) {
+                return written.result();
+            }
         }
         return StoreResult.success();
     }
 
-    /** Записать чекпоинт, если счета накопились. Вызывается по расписанию платформы. */
+    /**
+     * Записать чекпоинт, если счета накопились. Вызывается по расписанию платформы.
+     *
+     * <p>
+     * Копились ли счета, знает сам провайдер: у него файл. Провайдеру без обслуживания сохранять нечего,
+     * его {@code apply} уже зафиксировал операцию.
+     */
     public void autosave() {
-        if (builtin != null) {
-            builtin.flushCheckpoint();
+        if (readOnly || maintenance() == null) {
+            return;
+        }
+        CheckpointResult written = checkpoint();
+        if (!written.successful()) {
+            log.warn(
+                "Autosave could not write the checkpoint: {}",
+                written.result()
+                    .message()
+                    .orElse("no reason given"));
         }
     }
 
-    private StoreResult save(LedgerState current) {
-        StoreSnapshot snapshot = StoreSnapshot.of(
+    /** Отпустить носитель на остановке сервера. */
+    public void close() {
+        EconomyStore resolved = store.peek();
+        if (resolved == null) {
+            return;
+        }
+        try {
+            resolved.close();
+        } catch (RuntimeException failure) {
+            log.warn("Provider {} failed to close: {}", resolved.id(), failure.toString());
+        }
+    }
+
+    private StoreMaintenance maintenance() {
+        EconomyStore active = store();
+        return active instanceof StoreMaintenance ? (StoreMaintenance) active : null;
+    }
+
+    private EconomyStore store() {
+        return store.get();
+    }
+
+    private StoreSnapshot snapshotOf(LedgerState current) {
+        return StoreSnapshot.of(
             current.accounts(),
             current.lastSeq(),
             current.history()
                 .records());
-        StoreResult stored = store.save(snapshot);
+    }
+
+    private StoreResult save(LedgerState current) {
+        StoreResult stored = store().save(snapshotOf(current));
         if (stored.successful()) {
             state = current.withCheckpoint(current.lastSeq());
         }
         return stored;
     }
 
-    private TransferResult pipeline(TransferRequest request, ChangeCause cause) {
+    private TransferResult pipeline(TransferRequest request, ChangeCause cause, Boolean floorBypass) {
         if (readOnly) {
             return refuse(request, ResultCode.READONLY, null);
         }
@@ -396,7 +514,7 @@ public final class Ledger {
             return refuse(request, ResultCode.PAY_DISABLED, from, to, null);
         }
 
-        long floor = bypass(request.actor()) ? currency.negativeFloor() : currency.minBalance();
+        long floor = bypass(request, floorBypass) ? currency.negativeFloor() : currency.minBalance();
         Map<UUID, AccountView> accounts = new LinkedHashMap<>(current.accounts());
         List<AccountView> upserts = new ArrayList<>(2);
         TransactionRecord.Builder record = TransactionRecord
@@ -459,7 +577,8 @@ public final class Ledger {
             record.to(to.uuid(), after);
         }
 
-        Optional<GuardChain.Veto> veto = guards.check(request, from, to);
+        Optional<GuardChain.Veto> veto = guards.get()
+            .check(request, from, to);
         if (veto.isPresent()) {
             if (logChecks) {
                 log.debug(
@@ -503,6 +622,8 @@ public final class Ledger {
         LedgerState next = current.next(accounts, written, historyEntries);
         state = next;
         index.remember(written);
+        guards.get()
+            .committed(request);
         sweep(now);
 
         events.transactions(Collections.singletonList(written));
@@ -582,9 +703,13 @@ public final class Ledger {
         }
     }
 
-    private boolean bypass(Optional<UUID> actor) {
+    private boolean bypass(TransferRequest request, Boolean checked) {
+        if (checked != null) {
+            return checked.booleanValue();
+        }
+        Optional<UUID> actor = request.actor();
         if (!actor.isPresent()) {
-            return true;
+            return false;
         }
         try {
             return lookup.has(actor.get(), EconomyNodes.BYPASS_MIN_BALANCE);
@@ -658,9 +783,9 @@ public final class Ledger {
 
     private StoreResult write(ChangeBatch batch) {
         try {
-            return store.apply(batch);
+            return store().apply(batch);
         } catch (RuntimeException failure) {
-            log.error("Provider {} failed to store the batch: {}", store.id(), failure.toString(), failure);
+            log.error("Provider {} failed to store the batch: {}", store().id(), failure.toString(), failure);
             return StoreResult.failure(StoreResult.Failure.WRITE_FAILED, failure.toString());
         }
     }
@@ -672,8 +797,8 @@ public final class Ledger {
         degraded = true;
         String reason = stored.message()
             .orElse("storage refused the write");
-        log.warn("Economy enters degraded mode, provider {}: {}", store.id(), reason);
-        events.degraded(DegradedEvent.of(true, store.id(), reason));
+        log.warn("Economy enters degraded mode, provider {}: {}", store().id(), reason);
+        events.degraded(DegradedEvent.of(true, store().id(), reason));
     }
 
     private void restore() {
@@ -681,8 +806,8 @@ public final class Ledger {
             return;
         }
         degraded = false;
-        log.info("Economy leaves degraded mode, provider {} accepted a write again", store.id());
-        events.degraded(DegradedEvent.of(false, store.id(), null));
+        log.info("Economy leaves degraded mode, provider {} accepted a write again", store().id());
+        events.degraded(DegradedEvent.of(false, store().id(), null));
     }
 
     private void sweep(long now) {
@@ -769,28 +894,5 @@ public final class Ledger {
 
     private static Long afterOf(OptionalLong value) {
         return value.isPresent() ? Long.valueOf(value.getAsLong()) : null;
-    }
-
-    private static Map<String, CurrencyRecord> byId(List<CurrencyRecord> currencies) {
-        Map<String, CurrencyRecord> known = new LinkedHashMap<>();
-        for (CurrencyRecord currency : currencies) {
-            known.put(currency.id(), currency);
-        }
-        return known;
-    }
-
-    private static Recovery.StartBalances starting(List<CurrencyRecord> currencies) {
-        final Map<String, Long> starting = new LinkedHashMap<>();
-        for (CurrencyRecord currency : currencies) {
-            starting.put(currency.id(), Long.valueOf(currency.startBalance()));
-        }
-        return new Recovery.StartBalances() {
-
-            @Override
-            public long starting(String currencyId) {
-                Long value = starting.get(currencyId);
-                return value == null ? 0L : value.longValue();
-            }
-        };
     }
 }

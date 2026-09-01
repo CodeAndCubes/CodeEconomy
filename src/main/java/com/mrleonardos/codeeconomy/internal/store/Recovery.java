@@ -18,6 +18,7 @@ import org.apache.logging.log4j.Logger;
 
 import com.mrleonardos.codeeconomy.api.model.AccountView;
 import com.mrleonardos.codeeconomy.api.model.TransactionRecord;
+import com.mrleonardos.codeeconomy.api.store.StoreVerification;
 
 /**
  * Переигрывание журнала: восстановление состояния при старте и сверка after-балансов.
@@ -123,38 +124,52 @@ public final class Recovery {
 
     /**
      * Сверка по файлу журнала от чекпоинта: строки с {@code seq} больше границы ложатся на счета
-     * чекпоинта, итог сравнивается с текущими счетами. Работает и после того, как кольцевая история
+     * чекпоинта, итог сравнивается с переданными счетами. Работает и после того, как кольцевая история
      * вытеснила записи, потому что читает носитель, а не память.
+     *
+     * <p>
+     * Верхняя граница {@code upToSeq} снимается вместе со счетами. Без неё сверка на живом сервере
+     * ловила бы каждый {@code /pay}, прошедший пока она читала файл, и отчёт называл бы расхождением
+     * запись, которой в снимке счетов просто ещё нет.
      */
-    public static Verification verifyFromCheckpoint(Map<UUID, AccountView> checkpoint, long checkpointSeq, Path journal,
-        Map<UUID, AccountView> current, StartBalances start) {
+    public static StoreVerification verifyFromCheckpoint(Map<UUID, AccountView> checkpoint, long checkpointSeq,
+        Path journal, Map<UUID, AccountView> current, long upToSeq, StartBalances start) {
         List<String> lines = lines(journal);
         if (lines == null) {
-            return new Verification(
-                Collections.singletonList("journal " + journal.getFileName() + " cannot be read, the check is void"),
-                0L,
-                true);
+            return StoreVerification
+                .unreadable("journal " + journal.getFileName() + " cannot be read, the check is void");
         }
         Replay replay = new Replay(checkpoint, start);
-        long skipped = 0L;
-        for (String line : lines) {
-            String trimmed = line.trim();
+        long settled = 0L;
+        long ahead = 0L;
+        List<Integer> damaged = new ArrayList<>();
+        for (int index = 0; index < lines.size(); index++) {
+            String trimmed = lines.get(index)
+                .trim();
             if (trimmed.isEmpty()) {
                 continue;
             }
             TransactionRecord record = JournalCodec.decode(trimmed);
             if (record == null) {
+                damaged.add(Integer.valueOf(index + 1));
                 continue;
             }
             if (record.seq() <= checkpointSeq) {
-                skipped++;
+                settled++;
+                continue;
+            }
+            if (record.seq() > upToSeq) {
+                ahead++;
                 continue;
             }
             replay.step(record);
         }
         List<String> findings = new ArrayList<>(replay.findings);
+        if (!damaged.isEmpty()) {
+            findings.add(damaged.size() + " unreadable line(s) in the journal: " + damaged);
+        }
         compare(replay, current, start, findings);
-        return new Verification(findings, skipped, false);
+        return StoreVerification.of(findings, settled, ahead, damaged.size());
     }
 
     private static void compare(Replay replay, Map<UUID, AccountView> current, StartBalances start,
@@ -223,7 +238,7 @@ public final class Recovery {
     }
 
     /** Строки журнала, пустой список для отсутствующего файла, {@code null} для нечитаемого. */
-    private static List<String> lines(Path journal) {
+    static List<String> lines(Path journal) {
         if (!Files.exists(journal)) {
             return Collections.emptyList();
         }
@@ -436,33 +451,6 @@ public final class Recovery {
 
         public Corruption corruption() {
             return corruption;
-        }
-    }
-
-    /** Итог сверки по файлу журнала: расхождения, число строк ниже чекпоинта и нечитаемость. */
-    public static final class Verification {
-
-        private final List<String> findings;
-        private final long skipped;
-        private final boolean unreadable;
-
-        public Verification(List<String> findings, long skipped, boolean unreadable) {
-            this.findings = Collections.unmodifiableList(new ArrayList<>(findings));
-            this.skipped = skipped;
-            this.unreadable = unreadable;
-        }
-
-        public List<String> findings() {
-            return findings;
-        }
-
-        /** Число строк ниже границы чекпоинта: их балансы уже в чекпоинте, сверка их не трогает. */
-        public long skipped() {
-            return skipped;
-        }
-
-        public boolean unreadable() {
-            return unreadable;
         }
     }
 }

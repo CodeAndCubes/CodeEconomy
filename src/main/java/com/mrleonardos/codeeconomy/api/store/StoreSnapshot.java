@@ -13,12 +13,20 @@ import com.mrleonardos.codeeconomy.api.model.AccountView;
 import com.mrleonardos.codeeconomy.api.model.TransactionRecord;
 
 /**
- * Состояние денег целиком, как его отдаёт провайдер при загрузке.
+ * Состояние денег целиком: и то, что провайдер отдаёт при загрузке, и то, что движок передаёт ему на
+ * полную выгрузку.
  *
  * <p>
- * Носит чекпоинт счетов, записи журнала и границу чекпоинта: провайдер сам складывает чекпоинт и
- * записи после него, движок принимает результат как данность. Флаг только для чтения закрывает
- * мутации, когда носитель поднялся после аварии, например журнал ушёл в карантин.
+ * Носит счета, записи журнала и границу {@code checkpointSeq}. При загрузке граница означает «счета
+ * учитывают всё до этой записи включительно, дальше идут переигранные записи». При выгрузке
+ * ({@link EconomyStore#save} и {@link StoreMaintenance#checkpoint}) движок ставит границей свой
+ * {@code lastSeq}: счета в снимке учитывают все проведённые операции, поэтому провайдер вправе
+ * записать их вместе с этой границей одной атомарной подменой.
+ *
+ * <p>
+ * Флаг только для чтения закрывает мутации, когда носитель поднялся после аварии, например журнал ушёл
+ * в карантин. Расхождения, найденные при переигрывании, приходят отдельным списком: движок пишет их в
+ * лог и отдаёт слушателям, но состояние они не меняют.
  */
 public final class StoreSnapshot {
 
@@ -26,20 +34,23 @@ public final class StoreSnapshot {
         Collections.emptyMap(),
         0L,
         Collections.emptyList(),
+        Collections.emptyList(),
         false,
         null);
 
     private final Map<UUID, AccountView> accounts;
     private final long checkpointSeq;
     private final List<TransactionRecord> transactions;
+    private final List<String> findings;
     private final boolean readOnly;
     private final String reason;
 
     private StoreSnapshot(Map<UUID, AccountView> accounts, long checkpointSeq, List<TransactionRecord> transactions,
-        boolean readOnly, String reason) {
+        List<String> findings, boolean readOnly, String reason) {
         this.accounts = accounts;
         this.checkpointSeq = checkpointSeq;
         this.transactions = transactions;
+        this.findings = findings;
         this.readOnly = readOnly;
         this.reason = reason;
     }
@@ -47,15 +58,21 @@ public final class StoreSnapshot {
     /**
      * Собрать состояние.
      *
-     * @param accounts      чекпоинт счетов
-     * @param checkpointSeq наибольший {@code seq}, попавший в чекпоинт
+     * @param accounts      счета
+     * @param checkpointSeq наибольший {@code seq}, который эти счета учитывают
      * @param transactions  записи журнала, включая переигранные после чекпоинта
      */
     public static StoreSnapshot of(Map<UUID, AccountView> accounts, long checkpointSeq,
         List<TransactionRecord> transactions) {
         Objects.requireNonNull(accounts, "accounts");
         Objects.requireNonNull(transactions, "transactions");
-        return new StoreSnapshot(copyAccounts(accounts), checkpointSeq, copyTransactions(transactions), false, null);
+        return new StoreSnapshot(
+            copyAccounts(accounts),
+            checkpointSeq,
+            copyTransactions(transactions),
+            Collections.emptyList(),
+            false,
+            null);
     }
 
     /** Пустое состояние: счетов нет, журнал пуст, граница чекпоинта ноль. */
@@ -66,12 +83,27 @@ public final class StoreSnapshot {
     /**
      * То же состояние, но только для чтения.
      *
-     * @param reason что случилось, попадает в лог
+     * @param whatHappened что случилось, попадает в лог и в ответ администратору
      */
-    public static StoreSnapshot readOnly(StoreSnapshot source, String reason) {
-        Objects.requireNonNull(source, "source");
-        Objects.requireNonNull(reason, "reason");
-        return new StoreSnapshot(source.accounts, source.checkpointSeq, source.transactions, true, reason);
+    public StoreSnapshot readOnly(String whatHappened) {
+        Objects.requireNonNull(whatHappened, "whatHappened");
+        return new StoreSnapshot(accounts, checkpointSeq, transactions, findings, true, whatHappened);
+    }
+
+    /**
+     * То же состояние с расхождениями, найденными при переигрывании журнала.
+     *
+     * @param replayFindings расхождения между записанными балансами и переигранными
+     */
+    public StoreSnapshot withFindings(List<String> replayFindings) {
+        Objects.requireNonNull(replayFindings, "replayFindings");
+        return new StoreSnapshot(
+            accounts,
+            checkpointSeq,
+            transactions,
+            Collections.unmodifiableList(new ArrayList<>(replayFindings)),
+            readOnly,
+            reason);
     }
 
     /** Счета по владельцам. */
@@ -87,6 +119,11 @@ public final class StoreSnapshot {
     /** Записи журнала в порядке {@code seq}. */
     public List<TransactionRecord> transactions() {
         return transactions;
+    }
+
+    /** Расхождения переигрывания: пустой список, когда журнал и балансы сошлись. */
+    public List<String> findings() {
+        return findings;
     }
 
     /** Правда ли мутации закрыты. */
@@ -122,13 +159,14 @@ public final class StoreSnapshot {
         return checkpointSeq == that.checkpointSeq && readOnly == that.readOnly
             && accounts.equals(that.accounts)
             && transactions.equals(that.transactions)
+            && findings.equals(that.findings)
             && Objects.equals(reason, that.reason);
     }
 
     @Override
     public int hashCode() {
-        return (((accounts.hashCode() * 31 + Long.hashCode(checkpointSeq)) * 31 + transactions.hashCode()) * 31
-            + Boolean.hashCode(readOnly)) * 31 + Objects.hashCode(reason);
+        return ((((accounts.hashCode() * 31 + Long.hashCode(checkpointSeq)) * 31 + transactions.hashCode()) * 31
+            + findings.hashCode()) * 31 + Boolean.hashCode(readOnly)) * 31 + Objects.hashCode(reason);
     }
 
     @Override

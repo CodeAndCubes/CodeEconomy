@@ -24,6 +24,12 @@ import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
  * Essentials, где баланс лежит в мажорных единицах.
  *
  * <p>
+ * Единицы у форматов разные, и это не деталь: {@code flatjson} несёт то же целое, что лежит в журнале
+ * (для валюты с {@code decimals = 2} число 100 это один коин), а Essentials пишет человеческие суммы,
+ * которые надо умножить на 10^decimals. Один общий разбор завысил бы балансы всего сервера в сто раз,
+ * поэтому читатели разведены.
+ *
+ * <p>
  * Источник никогда не меняется. Каждая строка отчёта объясняет, почему значение не поехало:
  * отрицательное, сверх потолка валюты или с непригодным uuid.
  */
@@ -65,7 +71,7 @@ public final class BalanceImporters {
                 imported.rejected.add("the account ceiling of " + limits.accounts() + " is reached");
                 return imported;
             }
-            Long amount = amount(entry.getValue(), currency, imported, entry.getKey());
+            Long amount = minorUnits(entry.getValue(), currency, imported, entry.getKey());
             if (amount != null) {
                 imported.accepted.put(player, amount);
             }
@@ -93,7 +99,7 @@ public final class BalanceImporters {
                 continue;
             }
             String money = moneyOf(file, imported);
-            Long amount = money == null ? null : amount(money, currency, imported, name);
+            Long amount = money == null ? null : majorUnits(money, currency, imported, name);
             if (amount != null) {
                 imported.accepted.put(player, amount);
             }
@@ -182,20 +188,26 @@ public final class BalanceImporters {
         }
     }
 
-    private static Long amount(JsonElement raw, CurrencyRecord currency, Imported imported, String owner) {
+    /** Число из flatjson: это уже минорные единицы, масштабировать нечего. */
+    private static Long minorUnits(JsonElement raw, CurrencyRecord currency, Imported imported, String owner) {
         if (raw == null || !raw.isJsonPrimitive()) {
             imported.rejected.add(owner + " carries no numeric balance");
             return null;
         }
-        return amount(
-            raw.getAsString()
-                .trim(),
-            currency,
-            imported,
-            owner);
+        String text = raw.getAsString()
+            .trim();
+        long amount;
+        try {
+            amount = Long.parseLong(text);
+        } catch (NumberFormatException malformed) {
+            imported.rejected.add(owner + " carries an unusable balance " + text + ", minor units are whole numbers");
+            return null;
+        }
+        return inRange(amount, currency, imported, owner);
     }
 
-    private static Long amount(String raw, CurrencyRecord currency, Imported imported, String owner) {
+    /** Число из Essentials: мажорные единицы, разбираются по правилам валюты. */
+    private static Long majorUnits(String raw, CurrencyRecord currency, Imported imported, String owner) {
         long amount;
         try {
             amount = Amounts.parse(raw, currency);
@@ -203,6 +215,10 @@ public final class BalanceImporters {
             imported.rejected.add(owner + " carries an unusable balance " + raw);
             return null;
         }
+        return inRange(amount, currency, imported, owner);
+    }
+
+    private static Long inRange(long amount, CurrencyRecord currency, Imported imported, String owner) {
         if (amount < currency.minBalance()) {
             imported.rejected.add(owner + " carries " + amount + " below the floor of " + currency.minBalance());
             return null;

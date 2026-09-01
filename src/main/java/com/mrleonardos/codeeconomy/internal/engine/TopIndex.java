@@ -19,6 +19,10 @@ import com.mrleonardos.codeeconomy.api.model.BalanceEntry;
  * Сортировка всех счетов на каждой просьбе стоит заметно дороже, чем нужно команде, поэтому список
  * пересобирается не чаще {@code top.cacheTicks} тиков. Между пересборками отвечает кеш, страницы
  * нарезаются из него.
+ *
+ * <p>
+ * Счёт без записи по валюте стоит в топе со стартовым балансом: {@code /balance} отвечает по нему
+ * ровно так же, и расходиться эти два ответа не должны.
  */
 public final class TopIndex {
 
@@ -29,28 +33,23 @@ public final class TopIndex {
         this.cacheTicks = Math.max(0L, cacheTicks);
     }
 
-    public List<BalanceEntry> top(String currencyId, Map<UUID, AccountView> accounts, int page, int pageSize,
-        long tick) {
+    public List<BalanceEntry> top(String currencyId, long startBalance, Map<UUID, AccountView> accounts, int page,
+        int pageSize, long tick) {
         if (page < 0 || pageSize <= 0) {
             return Collections.emptyList();
         }
-        List<BalanceEntry> sorted = sorted(currencyId, accounts, tick);
-        int from = page * pageSize;
+        List<BalanceEntry> sorted = sorted(currencyId, startBalance, accounts, tick);
+        long from = (long) page * (long) pageSize;
         if (from >= sorted.size()) {
             return Collections.emptyList();
         }
-        int to = Math.min(from + pageSize, sorted.size());
-        return new ArrayList<>(sorted.subList(from, to));
+        int start = (int) from;
+        int to = (int) Math.min(from + pageSize, sorted.size());
+        return new ArrayList<>(sorted.subList(start, to));
     }
 
-    /** Сбросить кеш, следующий ответ соберётся заново. */
-    public void invalidate() {
-        synchronized (this) {
-            cache.clear();
-        }
-    }
-
-    private List<BalanceEntry> sorted(String currencyId, Map<UUID, AccountView> accounts, long tick) {
+    private List<BalanceEntry> sorted(String currencyId, long startBalance, Map<UUID, AccountView> accounts,
+        long tick) {
         synchronized (this) {
             Cached cached = cache.get(currencyId);
             if (cached != null && tick - cached.tick < cacheTicks) {
@@ -61,15 +60,12 @@ public final class TopIndex {
         for (AccountView account : accounts.values()) {
             Long amount = account.balances()
                 .get(currencyId);
-            if (amount == null) {
-                continue;
-            }
             entries.add(
                 BalanceEntry.of(
                     account.uuid(),
                     account.name()
                         .orElse(null),
-                    amount.longValue()));
+                    amount == null ? startBalance : amount.longValue()));
         }
         entries.sort(ORDER);
         synchronized (this) {

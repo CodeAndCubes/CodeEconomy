@@ -22,6 +22,7 @@ import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
 import com.mrleonardos.codeeconomy.api.model.TransactionRecord;
 import com.mrleonardos.codeeconomy.api.model.TransferRequest;
 import com.mrleonardos.codeeconomy.api.model.TransferResult;
+import com.mrleonardos.codeeconomy.internal.EconomyNodes;
 
 public final class EconomyCommands {
 
@@ -69,6 +70,7 @@ public final class EconomyCommands {
             verify(),
             checkpoint(),
             compact(),
+            unlock(),
             importBranch());
     }
 
@@ -85,7 +87,7 @@ public final class EconomyCommands {
     private CommandNode balance() {
         CommandNode node = CommandNode.literal("balance")
             .alias("bal", "money")
-            .permission(EconomyPermissions.BALANCE)
+            .permission(EconomyNodes.BALANCE)
             .usage(EconomyMessages.USAGE_BALANCE)
             .optionalArg(PLAYER_ARGUMENT, arguments.player())
             .executes(this::balance);
@@ -94,7 +96,7 @@ public final class EconomyCommands {
 
     private CommandNode pay() {
         CommandNode node = CommandNode.literal("pay")
-            .permission(EconomyPermissions.PAY)
+            .permission(EconomyNodes.PAY)
             .usage(EconomyMessages.USAGE_PAY)
             .arg(PLAYER_ARGUMENT, arguments.player())
             .arg(AMOUNT_ARGUMENT, ArgumentTypes.word())
@@ -104,7 +106,7 @@ public final class EconomyCommands {
 
     private CommandNode baltop() {
         CommandNode node = CommandNode.literal("baltop")
-            .permission(EconomyPermissions.BALTOP)
+            .permission(EconomyNodes.BALTOP)
             .usage(EconomyMessages.USAGE_BALTOP)
             .optionalArg(PAGE_ARGUMENT, pageArgument())
             .executes(this::baltop);
@@ -113,7 +115,7 @@ public final class EconomyCommands {
 
     private CommandNode history() {
         return CommandNode.literal("history")
-            .permission(EconomyPermissions.HISTORY)
+            .permission(EconomyNodes.HISTORY)
             .usage(EconomyMessages.USAGE_HISTORY)
             .optionalArg(PAGE_ARGUMENT, pageArgument())
             .executes(this::ownHistory);
@@ -131,7 +133,7 @@ public final class EconomyCommands {
 
     private CommandNode give() {
         CommandNode node = CommandNode.literal("give")
-            .permission(EconomyPermissions.ADMIN_GIVE)
+            .permission(EconomyNodes.ADMIN_GIVE)
             .usage(EconomyMessages.USAGE_ECO_GIVE)
             .arg(PLAYER_ARGUMENT, arguments.player())
             .arg(AMOUNT_ARGUMENT, ArgumentTypes.word())
@@ -141,7 +143,7 @@ public final class EconomyCommands {
 
     private CommandNode take() {
         CommandNode node = CommandNode.literal("take")
-            .permission(EconomyPermissions.ADMIN_TAKE)
+            .permission(EconomyNodes.ADMIN_TAKE)
             .usage(EconomyMessages.USAGE_ECO_TAKE)
             .arg(PLAYER_ARGUMENT, arguments.player())
             .arg(AMOUNT_ARGUMENT, ArgumentTypes.word())
@@ -151,7 +153,7 @@ public final class EconomyCommands {
 
     private CommandNode set() {
         CommandNode node = CommandNode.literal("set")
-            .permission(EconomyPermissions.ADMIN_SET)
+            .permission(EconomyNodes.ADMIN_SET)
             .usage(EconomyMessages.USAGE_ECO_SET)
             .arg(PLAYER_ARGUMENT, arguments.player())
             .arg(AMOUNT_ARGUMENT, ArgumentTypes.word())
@@ -161,7 +163,7 @@ public final class EconomyCommands {
 
     private CommandNode reset() {
         CommandNode node = CommandNode.literal("reset")
-            .permission(EconomyPermissions.ADMIN_RESET)
+            .permission(EconomyNodes.ADMIN_RESET)
             .usage(EconomyMessages.USAGE_ECO_RESET)
             .arg(PLAYER_ARGUMENT, arguments.player())
             .executes(this::reset);
@@ -170,7 +172,7 @@ public final class EconomyCommands {
 
     private CommandNode adminHistory() {
         return CommandNode.literal("history")
-            .permission(EconomyPermissions.ADMIN_HISTORY)
+            .permission(EconomyNodes.ADMIN_HISTORY)
             .usage(EconomyMessages.USAGE_ECO_HISTORY)
             .arg(PLAYER_ARGUMENT, arguments.player())
             .optionalArg(PAGE_ARGUMENT, pageArgument())
@@ -179,7 +181,7 @@ public final class EconomyCommands {
 
     private CommandNode freeze() {
         return CommandNode.literal("freeze")
-            .permission(EconomyPermissions.ADMIN_FREEZE)
+            .permission(EconomyNodes.ADMIN_FREEZE)
             .usage(EconomyMessages.USAGE_ECO_FREEZE)
             .arg(PLAYER_ARGUMENT, arguments.player())
             .arg(STATE_ARGUMENT, ArgumentTypes.enumOf(FreezeState.class))
@@ -188,28 +190,35 @@ public final class EconomyCommands {
 
     private CommandNode verify() {
         return CommandNode.literal("verify")
-            .permission(EconomyPermissions.ADMIN_VERIFY)
+            .permission(EconomyNodes.ADMIN_VERIFY)
             .usage(EconomyMessages.USAGE_ECO_VERIFY)
             .executes(this::verify);
     }
 
     private CommandNode checkpoint() {
         return CommandNode.literal("checkpoint")
-            .permission(EconomyPermissions.ADMIN_CHECKPOINT)
+            .permission(EconomyNodes.ADMIN_CHECKPOINT)
             .usage(EconomyMessages.USAGE_ECO_CHECKPOINT)
             .executes(this::checkpoint);
     }
 
     private CommandNode compact() {
         return CommandNode.literal("compact")
-            .permission(EconomyPermissions.ADMIN_COMPACT)
+            .permission(EconomyNodes.ADMIN_COMPACT)
             .usage(EconomyMessages.USAGE_ECO_COMPACT)
             .executes(this::compact);
     }
 
+    private CommandNode unlock() {
+        return CommandNode.literal("unlock")
+            .permission(EconomyNodes.ADMIN_UNLOCK)
+            .usage(EconomyMessages.USAGE_ECO_UNLOCK)
+            .executes(this::unlock);
+    }
+
     private CommandNode importBranch() {
         return CommandNode.literal("import")
-            .permission(EconomyPermissions.ADMIN_IMPORT)
+            .permission(EconomyNodes.ADMIN_IMPORT)
             .usage(EconomyMessages.USAGE_ECO_IMPORT)
             .arg(FORMAT_ARGUMENT, ArgumentTypes.word())
             .optionalArg(FILE_ARGUMENT, ArgumentTypes.word())
@@ -238,6 +247,17 @@ public final class EconomyCommands {
         return ArgumentTypes.integer(MIN_PAGE, MAX_PAGE);
     }
 
+    /**
+     * Есть ли у отправителя право уводить счёт до {@code negativeFloor}.
+     *
+     * <p>
+     * Спрашивается здесь, а не в движке: у консоли нет uuid, и по пустому автору движок обхода не
+     * даёт. Иначе любой чужой мод получал бы его, просто не заполнив поле actor.
+     */
+    private boolean floorBypass(CommandContext context) {
+        return subjects.senderHas(context, EconomyNodes.BYPASS_MIN_BALANCE);
+    }
+
     private void branches(CommandContext context) {
         List<String> visible = new ArrayList<>();
         for (CommandNode branch : adminBranches) {
@@ -260,7 +280,7 @@ public final class EconomyCommands {
         if (currency == null) {
             return;
         }
-        if (!target.equals(self) && !subjects.senderHas(context, EconomyPermissions.BALANCE_OTHER)) {
+        if (!target.equals(self) && !subjects.senderHas(context, EconomyNodes.BALANCE_OTHER)) {
             context.replyError(CommandMessages.NO_PERMISSION);
             return;
         }
@@ -290,7 +310,7 @@ public final class EconomyCommands {
         }
         TransferRequest request = TransferRequest
             .transfer(self, target, amount.getAsLong(), currency.id(), transactionId(), self, null);
-        TransferResult result = mutations.apply(request, ChangeCause.COMMAND);
+        TransferResult result = mutations.apply(request, ChangeCause.COMMAND, floorBypass(context));
         if (result.applied()) {
             context.reply(
                 EconomyMessages.PAY_SENT,
@@ -316,7 +336,7 @@ public final class EconomyCommands {
         }
         TransferRequest request = TransferRequest
             .deposit(target, amount.getAsLong(), currency.id(), transactionId(), actor, null);
-        TransferResult result = mutations.apply(request, ChangeCause.COMMAND);
+        TransferResult result = mutations.apply(request, ChangeCause.COMMAND, floorBypass(context));
         if (result.applied()) {
             context.reply(
                 EconomyMessages.GIVE_DONE,
@@ -342,7 +362,7 @@ public final class EconomyCommands {
         }
         TransferRequest request = TransferRequest
             .withdraw(target, amount.getAsLong(), currency.id(), transactionId(), actor, null);
-        TransferResult result = mutations.apply(request, ChangeCause.COMMAND);
+        TransferResult result = mutations.apply(request, ChangeCause.COMMAND, floorBypass(context));
         if (result.applied()) {
             context.reply(
                 EconomyMessages.TAKE_DONE,
@@ -368,7 +388,7 @@ public final class EconomyCommands {
         }
         TransferRequest request = TransferRequest
             .set(target, amount.getAsLong(), currency.id(), transactionId(), actor, null);
-        TransferResult result = mutations.apply(request, ChangeCause.COMMAND);
+        TransferResult result = mutations.apply(request, ChangeCause.COMMAND, floorBypass(context));
         if (result.applied()) {
             context.reply(EconomyMessages.SET_DONE, name(target), shown(result.toAfter(), target, currency));
             return;
@@ -385,7 +405,7 @@ public final class EconomyCommands {
             return;
         }
         TransferRequest request = TransferRequest.reset(target, currency.id(), transactionId(), actor, null);
-        TransferResult result = mutations.apply(request, ChangeCause.COMMAND);
+        TransferResult result = mutations.apply(request, ChangeCause.COMMAND, floorBypass(context));
         if (result.applied()) {
             context.reply(EconomyMessages.RESET_DONE, name(target), shown(result.toAfter(), target, currency));
             return;
@@ -472,11 +492,40 @@ public final class EconomyCommands {
     }
 
     private void checkpoint(CommandContext context) {
-        replyWithNumber(context, maintenance.checkpoint(), EconomyMessages.CHECKPOINT_DONE);
+        MaintenanceOutcome outcome = maintenance.checkpoint();
+        if (!outcome.successful()) {
+            replyFailure(context, outcome);
+            return;
+        }
+        context.reply(
+            written(outcome) ? EconomyMessages.CHECKPOINT_DONE : EconomyMessages.CHECKPOINT_SKIPPED,
+            Long.valueOf(outcome.number()));
     }
 
     private void compact(CommandContext context) {
         replyWithNumber(context, maintenance.compact(), EconomyMessages.COMPACT_DONE);
+    }
+
+    private void unlock(CommandContext context) {
+        MaintenanceOutcome outcome = maintenance.unlock();
+        if (!outcome.successful()) {
+            replyFailure(context, outcome);
+            return;
+        }
+        context.reply(outcome.number() > 0L ? EconomyMessages.UNLOCK_DONE : EconomyMessages.UNLOCK_IDLE);
+    }
+
+    /**
+     * Правда ли снимок действительно записан. Обслуживание отвечает признаком в значениях, потому что
+     * ответ «граница та же, писать было нечего» и ответ «файл переписан» это разные новости для
+     * администратора.
+     */
+    private static boolean written(MaintenanceOutcome outcome) {
+        return outcome.successful() && !outcome.values()
+            .isEmpty()
+            && Boolean.TRUE.equals(
+                outcome.values()
+                    .get(0));
     }
 
     private void importBalances(CommandContext context) {

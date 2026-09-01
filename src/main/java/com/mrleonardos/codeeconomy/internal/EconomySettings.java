@@ -4,6 +4,7 @@ import org.apache.logging.log4j.Logger;
 
 import com.mrleonardos.codecore.api.config.ConfigScope;
 import com.mrleonardos.codecore.api.config.ConfigSpec;
+import com.mrleonardos.codecore.api.service.ServicePriority;
 import com.mrleonardos.codeeconomy.api.CurrencyIds;
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
 import com.mrleonardos.codeeconomy.internal.store.SchemaMigrations;
@@ -16,7 +17,13 @@ public final class EconomySettings {
     public static final String ACCOUNTS_FILE = "accounts";
 
     public static final String DEFAULT_PROVIDER = "json";
-    public static final String DEFAULT_ON_CORRUPT = "readonly";
+
+    /**
+     * Вес реализации в реестре ядра. Роль у мода такая же, как у CodePerms: отдельный мод поверх
+     * встроенной заглушки ядра, поэтому вес по всей линейке один и это {@code ADDON}. Потолок
+     * {@code OVERRIDE} остаётся администратору на случай, когда иначе не разрулить.
+     */
+    public static final ServicePriority DEFAULT_PRIORITY = ServicePriority.ADDON;
 
     public static final int DEFAULT_AUTOSAVE_SECONDS = 120;
     public static final long DEFAULT_MIN_TRANSFER = 1L;
@@ -28,6 +35,9 @@ public final class EconomySettings {
     public static final int DEFAULT_PAGE_SIZE = 10;
     public static final int DEFAULT_CACHE_TICKS = 100;
 
+    /** Потолок страницы: чат всё равно столько не покажет, а произведение страницы на размер растёт. */
+    public static final int MAX_PAGE_SIZE = 100;
+
     private static final EconomySettings DEFAULTS = new EconomySettings();
 
     public Storage storage = new Storage();
@@ -38,6 +48,8 @@ public final class EconomySettings {
     public Guards guards = new Guards();
     public Audit audit = new Audit();
 
+    public Service service = new Service();
+
     public static EconomySettings defaults() {
         return DEFAULTS;
     }
@@ -47,12 +59,6 @@ public final class EconomySettings {
             .scope(ConfigScope.SETTINGS)
             .schemaVersion(SchemaMigrations.SETTINGS_VERSION)
             .defaults(EconomySettings::defaults)
-            .build();
-    }
-
-    public EconomyLimits ceilings() {
-        return EconomyLimits.builder()
-            .historyEntries(history.maxEntries)
             .build();
     }
 
@@ -77,6 +83,31 @@ public final class EconomySettings {
         return CurrencyIds.isValid(normalized) ? normalized : CurrencyIds.DEFAULT;
     }
 
+    /**
+     * Вес, с которым мод предлагает {@code EconomyService} реестру ядра. Незнакомое имя трактуется как
+     * отсутствие настройки: молча уронить экономику из-за опечатки в конфиге хуже, чем встать заводским
+     * весом и объяснить это в логе.
+     */
+    public ServicePriority priority(Logger log) {
+        String requested = service.priority == null ? null : service.priority.trim();
+        if (requested == null || requested.isEmpty()) {
+            return DEFAULT_PRIORITY;
+        }
+        for (ServicePriority known : ServicePriority.values()) {
+            if (known.name()
+                .equalsIgnoreCase(requested)) {
+                return known;
+            }
+        }
+        log.warn("Unknown service.priority value {}, the factory {} is used", requested, DEFAULT_PRIORITY);
+        return DEFAULT_PRIORITY;
+    }
+
+    /** Размер страницы топа и истории, зажатый потолком: страница на размер считается в long. */
+    public int pageSize() {
+        return Math.max(1, Math.min(top.pageSize, MAX_PAGE_SIZE));
+    }
+
     public int autosaveTicks() {
         return Math.max(1, storage.autosaveSeconds) * 20;
     }
@@ -93,7 +124,11 @@ public final class EconomySettings {
 
         public String provider = DEFAULT_PROVIDER;
         public int autosaveSeconds = DEFAULT_AUTOSAVE_SECONDS;
-        public String onCorrupt = DEFAULT_ON_CORRUPT;
+    }
+
+    public static final class Service {
+
+        public String priority = DEFAULT_PRIORITY.name();
     }
 
     public static final class Limits {

@@ -35,6 +35,7 @@ import com.mrleonardos.codeeconomy.api.model.ResultCode;
 import com.mrleonardos.codeeconomy.api.model.TransactionRecord;
 import com.mrleonardos.codeeconomy.api.model.TransferRequest;
 import com.mrleonardos.codeeconomy.api.model.TransferResult;
+import com.mrleonardos.codeeconomy.internal.EconomyNodes;
 
 class EconomyCommandsTest {
 
@@ -72,19 +73,19 @@ class EconomyCommandsTest {
             roots.get(0)
                 .aliases());
         assertEquals(
-            EconomyPermissions.BALANCE,
+            EconomyNodes.BALANCE,
             roots.get(0)
                 .permissionNode());
         assertEquals(
-            EconomyPermissions.PAY,
+            EconomyNodes.PAY,
             roots.get(1)
                 .permissionNode());
         assertEquals(
-            EconomyPermissions.BALTOP,
+            EconomyNodes.BALTOP,
             roots.get(2)
                 .permissionNode());
         assertEquals(
-            EconomyPermissions.HISTORY,
+            EconomyNodes.HISTORY,
             roots.get(3)
                 .permissionNode());
         assertNull(
@@ -108,18 +109,20 @@ class EconomyCommandsTest {
                 "verify",
                 "checkpoint",
                 "compact",
+                "unlock",
                 "import"),
             names(eco.children()));
-        assertEquals(EconomyPermissions.ADMIN_GIVE, child(eco, "give").permissionNode());
-        assertEquals(EconomyPermissions.ADMIN_TAKE, child(eco, "take").permissionNode());
-        assertEquals(EconomyPermissions.ADMIN_SET, child(eco, "set").permissionNode());
-        assertEquals(EconomyPermissions.ADMIN_RESET, child(eco, "reset").permissionNode());
-        assertEquals(EconomyPermissions.ADMIN_HISTORY, child(eco, "history").permissionNode());
-        assertEquals(EconomyPermissions.ADMIN_FREEZE, child(eco, "freeze").permissionNode());
-        assertEquals(EconomyPermissions.ADMIN_VERIFY, child(eco, "verify").permissionNode());
-        assertEquals(EconomyPermissions.ADMIN_CHECKPOINT, child(eco, "checkpoint").permissionNode());
-        assertEquals(EconomyPermissions.ADMIN_COMPACT, child(eco, "compact").permissionNode());
-        assertEquals(EconomyPermissions.ADMIN_IMPORT, child(eco, "import").permissionNode());
+        assertEquals(EconomyNodes.ADMIN_UNLOCK, child(eco, "unlock").permissionNode());
+        assertEquals(EconomyNodes.ADMIN_GIVE, child(eco, "give").permissionNode());
+        assertEquals(EconomyNodes.ADMIN_TAKE, child(eco, "take").permissionNode());
+        assertEquals(EconomyNodes.ADMIN_SET, child(eco, "set").permissionNode());
+        assertEquals(EconomyNodes.ADMIN_RESET, child(eco, "reset").permissionNode());
+        assertEquals(EconomyNodes.ADMIN_HISTORY, child(eco, "history").permissionNode());
+        assertEquals(EconomyNodes.ADMIN_FREEZE, child(eco, "freeze").permissionNode());
+        assertEquals(EconomyNodes.ADMIN_VERIFY, child(eco, "verify").permissionNode());
+        assertEquals(EconomyNodes.ADMIN_CHECKPOINT, child(eco, "checkpoint").permissionNode());
+        assertEquals(EconomyNodes.ADMIN_COMPACT, child(eco, "compact").permissionNode());
+        assertEquals(EconomyNodes.ADMIN_IMPORT, child(eco, "import").permissionNode());
     }
 
     @Test
@@ -161,7 +164,7 @@ class EconomyCommandsTest {
 
     @Test
     void moderatorWithHistoryOnlySeesNoForbiddenBranch() {
-        subjects.held.add(EconomyPermissions.ADMIN_HISTORY);
+        subjects.held.add(EconomyNodes.ADMIN_HISTORY);
 
         TestCommandContext context = new TestCommandContext();
         execute(eco(), context);
@@ -201,7 +204,7 @@ class EconomyCommandsTest {
         assertEquals(CommandMessages.NO_PERMISSION, refused.last().key);
         assertTrue(mutations.requests.isEmpty());
 
-        subjects.held.add(EconomyPermissions.BALANCE_OTHER);
+        subjects.held.add(EconomyNodes.BALANCE_OTHER);
         subjects.names.put(TARGET, "Alex");
         TestCommandContext allowed = new TestCommandContext().set("player", TARGET.toString());
         execute(root("balance"), allowed);
@@ -721,8 +724,8 @@ class EconomyCommandsTest {
         private TransferResult result = TransferResult.success("test", null, null);
 
         @Override
-        public TransferResult apply(TransferRequest request, ChangeCause cause) {
-            requests.add(new Applied(request, cause));
+        public TransferResult apply(TransferRequest request, ChangeCause cause, boolean floorBypass) {
+            requests.add(new Applied(request, cause, floorBypass));
             return result;
         }
 
@@ -730,10 +733,12 @@ class EconomyCommandsTest {
 
             private final TransferRequest request;
             private final ChangeCause cause;
+            private final boolean floorBypass;
 
-            private Applied(TransferRequest request, ChangeCause cause) {
+            private Applied(TransferRequest request, ChangeCause cause, boolean floorBypass) {
                 this.request = request;
                 this.cause = cause;
+                this.floorBypass = floorBypass;
             }
         }
     }
@@ -767,6 +772,12 @@ class EconomyCommandsTest {
 
         @Override
         public MaintenanceOutcome compact() {
+            calls++;
+            return outcome;
+        }
+
+        @Override
+        public MaintenanceOutcome unlock() {
             calls++;
             return outcome;
         }

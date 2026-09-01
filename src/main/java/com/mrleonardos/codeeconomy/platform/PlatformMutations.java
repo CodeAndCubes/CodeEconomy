@@ -15,7 +15,7 @@ final class PlatformMutations implements EconomyMutations {
     }
 
     @Override
-    public TransferResult apply(TransferRequest request, ChangeCause cause) {
-        return service.execute(request, cause);
+    public TransferResult apply(TransferRequest request, ChangeCause cause, boolean floorBypass) {
+        return service.execute(request, cause, floorBypass);
     }
 }

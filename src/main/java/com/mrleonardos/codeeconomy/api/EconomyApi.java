@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import com.mrleonardos.codeeconomy.api.event.EconomyEvents;
 import com.mrleonardos.codeeconomy.api.guard.TransferGuard;
@@ -21,11 +22,14 @@ import com.mrleonardos.codeeconomy.api.store.EconomyStore;
  * </pre>
  *
  * <p>
- * Хранилища и гварды регистрируют на инициализации своего мода: к первому использованию денег всё
- * должно быть на местах. После заморозки реестра регистрация отклоняется {@code IllegalStateException},
- * потому что выбор провайдера и порядок цепочки уже состоялся. {@link #service()} и {@link #events()}
- * работают после того, как CodeEconomy соберёт свою реализацию, обращение раньше даёт понятную ошибку,
- * а не падение.
+ * Хранилища и гварды регистрируют на инициализации своего мода: реестр закрывается в постинициализации
+ * CodeEconomy, и только после этого выбирается активный провайдер и собирается цепочка гвардов.
+ * Регистрация после заморозки отклоняется {@code IllegalStateException}.
+ *
+ * <p>
+ * {@link #service()} отвечает тем же, чем реестр сервисов ядра: если экономику подменил другой мод,
+ * эта дверь ведёт к нему, а не к реализации CodeEconomy. Обращение до того, как CodeEconomy поднялся,
+ * даёт понятную ошибку, а не падение.
  */
 public final class EconomyApi {
 
@@ -35,7 +39,7 @@ public final class EconomyApi {
 
     private static volatile boolean frozen;
 
-    private static volatile EconomyService service;
+    private static volatile Supplier<EconomyService> service;
 
     private static volatile EconomyEvents events;
 
@@ -85,19 +89,28 @@ public final class EconomyApi {
         frozen = true;
     }
 
-    /** Подключает реализацию. Вызывается самим CodeEconomy: чужим модам метод не нужен. */
-    public static void install(EconomyService installedService, EconomyEvents installedEvents) {
-        service = Objects.requireNonNull(installedService, "installedService");
+    /**
+     * Подключает точку входа. Вызывается самим CodeEconomy: чужим модам метод не нужен.
+     *
+     * @param registryService откуда брать сервис; это реестр ядра, а не поле с реализацией, чтобы
+     *                        подмена сервиса чужим модом была видна и через эту дверь
+     */
+    public static void install(Supplier<EconomyService> registryService, EconomyEvents installedEvents) {
+        service = Objects.requireNonNull(registryService, "registryService");
         events = Objects.requireNonNull(installedEvents, "installedEvents");
     }
 
-    /** Деньги сервера. */
+    /** Деньги сервера: та же реализация, что держит реестр сервисов ядра. */
     public static EconomyService service() {
-        EconomyService installed = service;
+        Supplier<EconomyService> installed = service;
         if (installed == null) {
             throw new IllegalStateException("CodeEconomy is not ready yet, call it no earlier than its init phase");
         }
-        return installed;
+        EconomyService held = installed.get();
+        if (held == null) {
+            throw new IllegalStateException("No mod holds EconomyService in the core registry");
+        }
+        return held;
     }
 
     /** Реестр слушателей экономики. */

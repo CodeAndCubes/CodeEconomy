@@ -80,13 +80,6 @@ final class JournalAppender {
         untrusted = false;
     }
 
-    synchronized void truncate() throws IOException {
-        if (channel == null && !Files.exists(path)) {
-            return;
-        }
-        rewrite(java.util.Collections.<String>emptyList());
-    }
-
     synchronized void reset() throws IOException {
         close();
         Files.deleteIfExists(path);

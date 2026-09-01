@@ -40,10 +40,6 @@ public final class IdempotencyIndex {
         byId.put(record.transactionId(), record);
     }
 
-    public void forget(String transactionId) {
-        byId.remove(transactionId);
-    }
-
     /** Убрать записи старше окна, возвращает число вытесненных. */
     public int forgetBefore(long cutoffMillis) {
         int evicted = 0;

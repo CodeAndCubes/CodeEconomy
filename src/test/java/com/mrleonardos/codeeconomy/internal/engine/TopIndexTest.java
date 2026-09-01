@@ -20,7 +20,7 @@ class TopIndexTest {
     void sortsByAmountThenByNameIgnoringCase() {
         TopIndex top = new TopIndex(100L);
 
-        List<BalanceEntry> entries = top.top("coin", accounts(), 0, 10, 0L);
+        List<BalanceEntry> entries = top.top("coin", 0L, accounts(), 0, 10, 0L);
 
         assertEquals(Arrays.asList("Zoe", "alice", "alice2", "Alicia", "?", "Bob"), names(entries));
     }
@@ -31,14 +31,14 @@ class TopIndexTest {
 
         assertEquals(
             2,
-            top.top("coin", accounts(), 0, 2, 0L)
+            top.top("coin", 0L, accounts(), 0, 2, 0L)
                 .size());
-        assertEquals(Arrays.asList("Alicia", "?", "Bob"), names(top.top("coin", accounts(), 1, 3, 0L)));
+        assertEquals(Arrays.asList("Alicia", "?", "Bob"), names(top.top("coin", 0L, accounts(), 1, 3, 0L)));
         assertTrue(
-            top.top("coin", accounts(), 5, 2, 0L)
+            top.top("coin", 0L, accounts(), 5, 2, 0L)
                 .isEmpty());
         assertTrue(
-            top.top("coin", accounts(), 0, 0, 0L)
+            top.top("coin", 0L, accounts(), 0, 0, 0L)
                 .isEmpty());
     }
 
@@ -48,15 +48,14 @@ class TopIndexTest {
         Map<UUID, AccountView> accounts = new LinkedHashMap<>();
         accounts.put(uuid("a"), account("a", "Alice", 10L));
 
-        assertEquals(Arrays.asList("Alice"), names(top.top("coin", accounts, 0, 10, 0L)));
+        assertEquals(Arrays.asList("Alice"), names(top.top("coin", 0L, accounts, 0, 10, 0L)));
 
         accounts.put(uuid("b"), account("b", "Bob", 50L));
-        assertEquals(Arrays.asList("Alice"), names(top.top("coin", accounts, 0, 10, 50L)));
+        assertEquals(Arrays.asList("Alice"), names(top.top("coin", 0L, accounts, 0, 10, 50L)));
 
-        assertEquals(Arrays.asList("Bob", "Alice"), names(top.top("coin", accounts, 0, 10, 100L)));
+        assertEquals(Arrays.asList("Bob", "Alice"), names(top.top("coin", 0L, accounts, 0, 10, 100L)));
 
-        top.invalidate();
-        assertEquals(Arrays.asList("Bob", "Alice"), names(top.top("coin", accounts, 0, 10, 101L)));
+        assertEquals(Arrays.asList("Bob", "Alice"), names(top.top("coin", 0L, accounts, 0, 10, 101L)));
     }
 
     private static Map<UUID, AccountView> accounts() {
@@ -87,5 +86,32 @@ class TopIndexTest {
                     .orElse("?"));
         }
         return found;
+    }
+
+    /**
+     * Счёт, которого журнал по этой валюте ещё не касался, стоит в топе со стартовым балансом: команда
+     * баланса отвечает по нему ровно так же, и расходиться два ответа не должны.
+     */
+    @Test
+    void accountsWithoutAnEntryStandWithTheStartingBalance() {
+        TopIndex top = new TopIndex(100L);
+        Map<UUID, AccountView> accounts = new LinkedHashMap<>();
+        accounts.put(uuid("a"), account("a", "Alice", 10L));
+        accounts.put(uuid("b"), AccountView.of(uuid("b"), "Bob", java.util.Collections.emptyMap(), false, 0L));
+
+        assertEquals(Arrays.asList("Bob", "Alice"), names(top.top("coin", 100L, accounts, 0, 10, 0L)));
+    }
+
+    /**
+     * Страница на размер считалась в int: при большом top.pageSize произведение уходило в минус, и
+     * запрос страницы отвечал исключением прямо из обработчика команды.
+     */
+    @Test
+    void hugePageNumberGivesNothingInsteadOfOverflowing() {
+        TopIndex top = new TopIndex(100L);
+
+        assertTrue(
+            top.top("coin", 0L, accounts(), 1000000, 5000, 0L)
+                .isEmpty());
     }
 }

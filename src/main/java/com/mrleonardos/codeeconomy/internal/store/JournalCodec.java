@@ -1,5 +1,6 @@
 package com.mrleonardos.codeeconomy.internal.store;
 
+import java.util.OptionalLong;
 import java.util.UUID;
 
 import com.google.gson.JsonElement;
@@ -118,11 +119,16 @@ final class JournalCodec {
         }
         UUID from = uuidOf(text(data.get(FROM)));
         UUID to = uuidOf(text(data.get(TO)));
+        OptionalLong fromAfter = number(data.get(FROM_AFTER));
+        OptionalLong toAfter = number(data.get(TO_AFTER));
+        if ((from != null) != fromAfter.isPresent() || (to != null) != toAfter.isPresent()) {
+            return null;
+        }
         if (from != null) {
-            builder.from(from, longOf(data.get(FROM_AFTER), 0L));
+            builder.from(from, fromAfter.getAsLong());
         }
         if (to != null) {
-            builder.to(to, longOf(data.get(TO_AFTER), 0L));
+            builder.to(to, toAfter.getAsLong());
         }
         UUID actor = uuidOf(text(data.get(ACTOR)));
         if (actor != null) {
@@ -155,6 +161,22 @@ final class JournalCodec {
             return null;
         }
         return element.getAsString();
+    }
+
+    /**
+     * Число или пустой ответ. Сторона без разбираемого after-баланса делает запись негодной целиком:
+     * replay ставит балансы абсолютным присваиванием, и подстановка нуля вместо потерянного значения
+     * молча обнулила бы счёт вместо того, чтобы поднять карантин.
+     */
+    private static OptionalLong number(JsonElement element) {
+        if (element == null || !element.isJsonPrimitive()) {
+            return OptionalLong.empty();
+        }
+        try {
+            return OptionalLong.of(element.getAsLong());
+        } catch (RuntimeException malformed) {
+            return OptionalLong.empty();
+        }
     }
 
     private static long longOf(JsonElement element, long fallback) {

@@ -1,10 +1,8 @@
 package com.mrleonardos.codeeconomy.internal.store;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -17,22 +15,24 @@ import com.mrleonardos.codeeconomy.api.EconomyLimits;
 import com.mrleonardos.codeeconomy.api.model.AccountView;
 
 /**
- * Чекпоинт счетов: чтение файла, накопление изменений и запись через ConfigService ядра.
+ * Чекпоинт счетов: чтение файла и запись через ConfigService ядра.
  *
  * <p>
- * Файл остаётся согласован сам с собой: счета и граница чекпоинта живут в одном json и пишутся одной
- * атомарной подменой, поэтому после обрыва процесса восстановление переигрывает только строки журнала
- * с {@code seq} больше границы.
+ * Записывается всегда полный набор счетов вместе с границей, которую он покрывает, одной атомарной
+ * подменой. Разницы с прежним содержимым файл не знает: граница и счета обязаны согласоваться, иначе
+ * следующее восстановление пропустит записи журнала, чьи балансы в файл не попали, и деньги исчезнут
+ * молча. Полный набор счетов держит движок, писателю его передают на каждую запись.
  *
  * <p>
- * Накопленные счета держатся в собственном поле, а не в живом объекте конфига: перечитывание настроек
- * ядром накопленное не теряет. Чтение, накопление и запись идут под одним локом, поэтому сверка
- * {@code verify} из фонового потока видит файл либо до записи, либо после, но не посередине.
+ * Писатель помнит одно: копились ли счета с прошлой записи. Чтение и запись идут под одним локом,
+ * поэтому сверка {@code verify} из фонового потока видит файл либо до записи, либо после, но не
+ * посередине.
  */
 public final class SnapshotWriter {
 
     public static final String ACCOUNTS_FIELD = "accounts";
     public static final String CHECKPOINT_FIELD = "checkpointSeq";
+    public static final String QUARANTINE_FIELD = "quarantine";
 
     public static final String UUID_FIELD = "uuid";
     public static final String NAME_FIELD = "name";
@@ -40,13 +40,14 @@ public final class SnapshotWriter {
     public static final String FROZEN_FIELD = "frozen";
     public static final String CREATED_AT_FIELD = "createdAt";
 
+    public static final String QUARANTINE_AT_FIELD = "at";
+    public static final String QUARANTINE_REASON_FIELD = "reason";
+
     private final ConfigFile<JsonObject> file;
     private final EconomyLimits limits;
     private final Logger log;
     private final Object lock = new Object();
 
-    private final Map<UUID, AccountView> staged = new LinkedHashMap<>();
-    private long stagedSeq;
     private boolean dirty;
 
     public SnapshotWriter(ConfigFile<JsonObject> file, EconomyLimits limits, Logger log) {
@@ -86,77 +87,76 @@ public final class SnapshotWriter {
                     accounts.put(account.uuid(), account);
                 }
             }
-            return new Checkpoint(accounts, checkpointSeq);
+            return new Checkpoint(accounts, checkpointSeq, readMark(data.get(QUARANTINE_FIELD)));
         }
     }
 
-    /** Внести счета в накопитель и подвинуть границу чекпоинта. До записи на диск дело не доходит. */
-    public void stage(List<AccountView> upserts, long seq) {
+    /** Граница чекпоинта из файла без разбора счетов: для ответа, когда писать нечего. */
+    public long checkpointSeq() {
         synchronized (lock) {
-            for (AccountView account : upserts) {
-                staged.put(account.uuid(), account);
-            }
-            if (seq > stagedSeq) {
-                stagedSeq = seq;
-            }
+            return longOf(
+                file.get()
+                    .get(CHECKPOINT_FIELD));
+        }
+    }
+
+    /** Отметить, что счета изменились: ближайшая запись перенесёт их в файл. */
+    public void markDirty() {
+        synchronized (lock) {
             dirty = true;
         }
     }
 
-    /** Записать файл, если есть что записывать. */
-    public boolean saveIfDirty() {
+    /** Правда ли с прошлой записи счета менялись. */
+    public boolean dirty() {
         synchronized (lock) {
-            if (!dirty) {
-                return false;
-            }
-            long seq = Math.max(
-                longOf(
-                    file.get()
-                        .get(CHECKPOINT_FIELD)),
-                stagedSeq);
-            write(new ArrayList<>(staged.values()), seq);
-            staged.clear();
-            stagedSeq = 0L;
-            dirty = false;
-            return true;
+            return dirty;
         }
     }
 
-    /** Записать файл с указанной границей чекпоинта, вместе с накопленными счетами. */
-    public void save(long checkpointSeq) {
+    /**
+     * Записать счета целиком с границей, которую они покрывают.
+     *
+     * @param accounts      полный набор счетов, а не разница с прежним содержимым файла
+     * @param checkpointSeq наибольший {@code seq}, учтённый в этих счетах
+     * @param mark          признак карантина или null, когда носитель здоров
+     */
+    public void write(Map<UUID, AccountView> accounts, long checkpointSeq, Quarantine.Mark mark) {
         synchronized (lock) {
-            List<AccountView> accounts = new ArrayList<>(staged.values());
-            write(accounts, checkpointSeq);
-            staged.clear();
-            stagedSeq = 0L;
+            JsonObject data = file.get();
+            JsonObject stored = new JsonObject();
+            for (AccountView account : accounts.values()) {
+                stored.add(
+                    account.uuid()
+                        .toString(),
+                    encode(account));
+            }
+            data.add(ACCOUNTS_FIELD, stored);
+            data.addProperty(CHECKPOINT_FIELD, Long.valueOf(checkpointSeq));
+            if (mark == null) {
+                data.remove(QUARANTINE_FIELD);
+            } else {
+                data.add(QUARANTINE_FIELD, encode(mark));
+            }
+            file.save();
             dirty = false;
+        }
+    }
+
+    /** Снять признак карантина, счета и границу оставить как есть. */
+    public void clearQuarantine() {
+        synchronized (lock) {
+            JsonObject data = file.get();
+            if (data.get(QUARANTINE_FIELD) == null) {
+                return;
+            }
+            data.remove(QUARANTINE_FIELD);
+            file.save();
         }
     }
 
     public Path path() {
         return file.path();
-    }
-
-    private void write(List<AccountView> upserts, long checkpointSeq) {
-        JsonObject data = file.get();
-        JsonObject stored = accountsOf(data);
-        for (AccountView account : upserts) {
-            stored.add(
-                account.uuid()
-                    .toString(),
-                encode(account));
-        }
-        data.add(ACCOUNTS_FIELD, stored);
-        data.addProperty(CHECKPOINT_FIELD, Long.valueOf(checkpointSeq));
-        file.save();
-    }
-
-    private static JsonObject accountsOf(JsonObject data) {
-        JsonElement stored = data.get(ACCOUNTS_FIELD);
-        if (stored != null && stored.isJsonObject()) {
-            return stored.getAsJsonObject();
-        }
-        return new JsonObject();
     }
 
     private AccountView readAccount(String key, JsonObject data) {
@@ -181,6 +181,24 @@ public final class SnapshotWriter {
         long createdAt = longOf(data.get(CREATED_AT_FIELD));
         boolean frozen = booleanOf(data.get(FROZEN_FIELD));
         return AccountView.of(uuid, text(data.get(NAME_FIELD)), balances, frozen, createdAt);
+    }
+
+    private static Quarantine.Mark readMark(JsonElement element) {
+        if (element == null || !element.isJsonObject()) {
+            return null;
+        }
+        JsonObject data = element.getAsJsonObject();
+        String reason = text(data.get(QUARANTINE_REASON_FIELD));
+        return new Quarantine.Mark(
+            longOf(data.get(QUARANTINE_AT_FIELD)),
+            reason == null ? "the storage was quarantined by an earlier start" : reason);
+    }
+
+    private static JsonObject encode(Quarantine.Mark mark) {
+        JsonObject data = new JsonObject();
+        data.addProperty(QUARANTINE_AT_FIELD, Long.valueOf(mark.at()));
+        data.addProperty(QUARANTINE_REASON_FIELD, mark.reason());
+        return data;
     }
 
     private static JsonObject encode(AccountView account) {
@@ -257,15 +275,17 @@ public final class SnapshotWriter {
         }
     }
 
-    /** Содержимое чекпоинта: счета и наибольший {@code seq}, который в них попал. */
+    /** Содержимое чекпоинта: счета, граница, которую они покрывают, и признак карантина. */
     public static final class Checkpoint {
 
         private final Map<UUID, AccountView> accounts;
         private final long checkpointSeq;
+        private final Quarantine.Mark quarantine;
 
-        Checkpoint(Map<UUID, AccountView> accounts, long checkpointSeq) {
+        Checkpoint(Map<UUID, AccountView> accounts, long checkpointSeq, Quarantine.Mark quarantine) {
             this.accounts = Collections.unmodifiableMap(new LinkedHashMap<>(accounts));
             this.checkpointSeq = checkpointSeq;
+            this.quarantine = quarantine;
         }
 
         public Map<UUID, AccountView> accounts() {
@@ -274,6 +294,11 @@ public final class SnapshotWriter {
 
         public long checkpointSeq() {
             return checkpointSeq;
+        }
+
+        /** Признак карантина, оставленный прошлым стартом, или null. */
+        public Quarantine.Mark quarantine() {
+            return quarantine;
         }
     }
 }

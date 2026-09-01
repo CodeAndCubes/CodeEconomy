@@ -34,7 +34,6 @@ class StoreTest {
             1,
             batch.records()
                 .size());
-        assertFalse(batch.isEmpty());
         assertEquals(
             batch,
             ChangeBatch.builder(ChangeCause.COMMAND)
@@ -121,7 +120,7 @@ class StoreTest {
     @Test
     void readOnlySnapshotKeepsStateAndNamesTheReason() {
         StoreSnapshot source = StoreSnapshot.of(new LinkedHashMap<>(), 3L, java.util.Collections.emptyList());
-        StoreSnapshot quarantined = StoreSnapshot.readOnly(source, "journal is quarantined");
+        StoreSnapshot quarantined = source.readOnly("journal is quarantined");
         assertTrue(quarantined.readOnly());
         assertEquals(3L, quarantined.checkpointSeq());
         assertEquals(

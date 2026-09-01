@@ -17,6 +17,7 @@ import com.mrleonardos.codecore.api.util.Scheduler;
 import com.mrleonardos.codeeconomy.Tags;
 import com.mrleonardos.codeeconomy.api.EconomyApi;
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
+import com.mrleonardos.codeeconomy.api.EconomyService;
 import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
 import com.mrleonardos.codeeconomy.internal.EconomySettings;
 import com.mrleonardos.codeeconomy.internal.command.EconomyCommands;
@@ -80,10 +81,12 @@ public final class CodeEconomyMod {
             LOG);
 
         EconomyApi.install(
-            service,
+            () -> CodeApi.services()
+                .require(EconomyService.class),
             service.ledger()
                 .events());
-        ServiceBridge.register(service);
+        ServicePriority priority = config.priority(LOG);
+        ServiceBridge.register(service, priority);
 
         NameResolver names = new NameResolver(
             () -> service.ledger()
@@ -95,7 +98,7 @@ public final class CodeEconomyMod {
             new PlatformMaintenance(service, limits, CodeEconomyMod::serverRoot, LOG),
             new PlatformArguments(names, service),
             new SenderSubjects(
-                CodeApi.services()
+                () -> CodeApi.services()
                     .require(PermissionService.class),
                 names),
             pageSize());
@@ -107,9 +110,9 @@ public final class CodeEconomyMod {
             .register(new ForgeLifecycle(lifecycle, service, clock, config.autosaveTicks()));
 
         LOG.info(
-            "EconomyService is held by {} with weight {}, storage provider is {}",
+            "EconomyService is offered by {} with weight {}, storage provider from config is {}",
             LedgerService.IMPLEMENTATION,
-            ServicePriority.BUILTIN,
+            priority,
             config.provider());
     }
 
@@ -135,6 +138,7 @@ public final class CodeEconomyMod {
     }
 
     private IntSupplier pageSize() {
-        return () -> settings.get().top.pageSize;
+        return () -> settings.get()
+            .pageSize();
     }
 }

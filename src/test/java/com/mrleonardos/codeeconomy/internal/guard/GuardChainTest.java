@@ -145,4 +145,69 @@ class GuardChainTest {
         }
         return found;
     }
+
+    /**
+     * Гвард отмечает операцию только после записи: отказ носителя или вето соседа по цепочке не должны
+     * запирать игрока на весь кулдаун за перевод, которого не было.
+     */
+    @Test
+    void committedIsDeliveredToEveryGuardEvenWhenOneFails() {
+        List<String> notified = new ArrayList<>();
+        GuardChain chain = GuardChain
+            .of(Arrays.asList(failingOnCommit("broken"), recording("watcher", notified)), false, EconomyFixtures.LOG);
+
+        chain.committed(EconomyFixtures.transfer(EconomyFixtures.ALICE, EconomyFixtures.BOB, 10L, "tx1"));
+
+        assertEquals(Collections.singletonList("watcher"), notified);
+    }
+
+    private static TransferGuard failingOnCommit(String id) {
+        return new TransferGuard() {
+
+            @Override
+            public String id() {
+                return id;
+            }
+
+            @Override
+            public int priority() {
+                return 0;
+            }
+
+            @Override
+            public GuardResult check(TransferRequest request, AccountView from, AccountView to) {
+                return GuardResult.allow();
+            }
+
+            @Override
+            public void committed(TransferRequest request) {
+                throw new IllegalStateException("guard is broken");
+            }
+        };
+    }
+
+    private static TransferGuard recording(String id, List<String> notified) {
+        return new TransferGuard() {
+
+            @Override
+            public String id() {
+                return id;
+            }
+
+            @Override
+            public int priority() {
+                return 10;
+            }
+
+            @Override
+            public GuardResult check(TransferRequest request, AccountView from, AccountView to) {
+                return GuardResult.allow();
+            }
+
+            @Override
+            public void committed(TransferRequest request) {
+                notified.add(id);
+            }
+        };
+    }
 }

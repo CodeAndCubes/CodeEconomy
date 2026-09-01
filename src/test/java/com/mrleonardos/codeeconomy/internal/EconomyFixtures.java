@@ -12,6 +12,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import com.mrleonardos.codeeconomy.api.CurrencyIds;
+import com.mrleonardos.codeeconomy.api.guard.TransferGuard;
 import com.mrleonardos.codeeconomy.api.model.AccountView;
 import com.mrleonardos.codeeconomy.api.model.ChangeCause;
 import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
@@ -25,7 +26,6 @@ import com.mrleonardos.codeeconomy.internal.engine.Ledger;
 import com.mrleonardos.codeeconomy.internal.event.EventDispatcher;
 import com.mrleonardos.codeeconomy.internal.guard.GuardChain;
 import com.mrleonardos.codeeconomy.internal.service.PlayerLookup;
-import com.mrleonardos.codeeconomy.internal.store.JsonEconomyStore;
 
 /** Общие предметы тестов: валюты, игроки, подставной провайдер и собранный движок. */
 public final class EconomyFixtures {
@@ -137,35 +137,30 @@ public final class EconomyFixtures {
     /** Движок с подставным провайдером: запись идёт в память, файлы не трогаются. */
     public static Ledger ledger(EconomyStore store, List<CurrencyRecord> currencies, EconomySettings config,
         PlayerLookup lookup, LongSupplier clock) {
-        return ledger(store, null, currencies, config, lookup, clock, LOG);
-    }
-
-    public static Ledger ledger(EconomyStore store, JsonEconomyStore builtin, List<CurrencyRecord> currencies,
-        EconomySettings config, PlayerLookup lookup, LongSupplier clock) {
-        return ledger(store, builtin, currencies, config, lookup, clock, LOG);
+        return ledger(store, currencies, config, lookup, clock, LOG);
     }
 
     /** То же с подставным логгером: тесты аудита читают, что движок записал. */
     public static Ledger ledger(EconomyStore store, List<CurrencyRecord> currencies, EconomySettings config,
         PlayerLookup lookup, LongSupplier clock, Logger log) {
-        return ledger(store, null, currencies, config, lookup, clock, log);
+        return ledger(store, currencies, config, Collections.<TransferGuard>emptyList(), lookup, clock, log);
     }
 
-    public static Ledger ledger(EconomyStore store, JsonEconomyStore builtin, List<CurrencyRecord> currencies,
-        EconomySettings config, PlayerLookup lookup, LongSupplier clock, Logger log) {
+    /** Движок с цепочкой гвардов: для проверок порядка и вето. */
+    public static Ledger ledger(EconomyStore store, List<CurrencyRecord> currencies, EconomySettings config,
+        List<TransferGuard> guards, PlayerLookup lookup, LongSupplier clock, Logger log) {
         Ledger ledger = new Ledger(
-            store,
-            builtin,
+            () -> store,
             currencies,
             config.currencyId(),
             config,
-            config.ceilings(),
-            GuardChain.of(Collections.emptyList(), config.guards.failOpen, log),
+            config.ceilings(log),
+            () -> GuardChain.of(guards, config.guards.failOpen, log),
             new EventDispatcher(log),
             lookup,
             clock,
             log);
-        ledger.start(store.load());
+        ledger.loadWorld();
         return ledger;
     }
 

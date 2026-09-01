@@ -10,6 +10,11 @@ import org.apache.logging.log4j.Logger;
 /**
  * Карантин повреждённого журнала: файл убирается рядом, чтобы администратор разобрался, а мод
  * поднимался дальше.
+ *
+ * <p>
+ * Один перенос файла защищает ровно одну сессию: журнала на месте больше нет, и следующий старт видит
+ * здоровый чекпоинт. Поэтому вместе с переносом в состояние мира ложится {@link Mark}: пока признак не
+ * снят администратором, мод поднимается только для чтения, сколько бы раз сервер ни перезапускали.
  */
 public final class Quarantine {
 
@@ -31,6 +36,33 @@ public final class Quarantine {
                 log.error("Failed to move damaged journal {}: {}", journal, failure.toString());
             }
             return null;
+        }
+    }
+
+    /** Признак карантина в состоянии мира: когда случилось и что именно потеряно. */
+    public static final class Mark {
+
+        private final long at;
+        private final String reason;
+
+        public Mark(long at, String reason) {
+            this.at = at;
+            this.reason = reason;
+        }
+
+        /** Когда носитель ушёл в карантин, epoch millis. */
+        public long at() {
+            return at;
+        }
+
+        /** Что случилось: эта строка уходит администратору и в лог каждого старта. */
+        public String reason() {
+            return reason;
+        }
+
+        @Override
+        public String toString() {
+            return reason + " (at " + at + ")";
         }
     }
 }

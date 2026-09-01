@@ -83,6 +83,7 @@ public final class Currencies {
         return loaded;
     }
 
+    /** Валюты по идентификатору: один справочник на движок, команды и хранилище. */
     public static Map<String, CurrencyRecord> byId(List<CurrencyRecord> currencies) {
         Map<String, CurrencyRecord> known = new LinkedHashMap<>();
         for (CurrencyRecord currency : currencies) {
@@ -91,18 +92,40 @@ public final class Currencies {
         return known;
     }
 
-    public static Map<String, Long> startingBalances(List<CurrencyRecord> currencies) {
-        Map<String, Long> starting = new LinkedHashMap<>();
+    /**
+     * Стартовые балансы по валютам: на них опирается счёт, которого журнал ещё не касался.
+     *
+     * <p>
+     * Единственное место, где это правило записано. Разойдись копии в движке и в хранилище, расхождение
+     * вылезло бы только на сверке, и объяснить его было бы нечем.
+     */
+    public static Recovery.StartBalances startBalances(List<CurrencyRecord> currencies) {
+        final Map<String, Long> starting = new LinkedHashMap<>();
         for (CurrencyRecord currency : currencies) {
             starting.put(currency.id(), Long.valueOf(currency.startBalance()));
         }
-        return starting;
+        return new Recovery.StartBalances() {
+
+            @Override
+            public long starting(String currencyId) {
+                Long value = starting.get(currencyId);
+                return value == null ? 0L : value.longValue();
+            }
+        };
     }
 
     private static CurrencyRecord read(JsonObject data, EconomyLimits limits, Logger log) {
         String id = CurrencyIds.normalize(text(data.get(ID)));
         if (!CurrencyIds.isValid(id)) {
             warn(log, "Currency id {} does not match [a-z0-9_]{1,16} and was skipped", text(data.get(ID)));
+            return null;
+        }
+        if (!number(data.get(MAX_BALANCE))) {
+            warn(
+                log,
+                "Currency {} carries no numeric maxBalance and was skipped: with a zero ceiling every "
+                    + "operation on it would be refused",
+                id);
             return null;
         }
         try {
@@ -192,6 +215,18 @@ public final class Currencies {
             return element.getAsLong();
         } catch (RuntimeException malformed) {
             return fallback;
+        }
+    }
+
+    private static boolean number(JsonElement element) {
+        if (element == null || !element.isJsonPrimitive()) {
+            return false;
+        }
+        try {
+            element.getAsLong();
+            return true;
+        } catch (RuntimeException malformed) {
+            return false;
         }
     }
 

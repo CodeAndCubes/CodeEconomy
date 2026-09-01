@@ -49,17 +49,17 @@ class ServiceBridgeTest {
     }
 
     @Test
-    void bridgeHandsTheServiceToTheCoreAsBuiltin() {
+    void bridgeHandsTheServiceToTheCoreWithTheConfiguredWeight() {
         assertTrue(installed, "тесту нужен свой рантайм ядра");
         StubService service = new StubService();
 
-        ServiceBridge.register(service);
+        ServiceBridge.register(service, ServicePriority.ADDON);
 
         assertEquals(1, REGISTRY.registrations.size());
         Registration registration = REGISTRY.registrations.get(0);
         assertEquals(EconomyService.class, registration.type);
         assertSame(service, registration.implementation);
-        assertEquals(ServicePriority.BUILTIN, registration.priority);
+        assertEquals(ServicePriority.ADDON, registration.priority);
     }
 
     @Test
@@ -67,7 +67,9 @@ class ServiceBridgeTest {
         assertTrue(installed, "тесту нужен свой рантайм ядра");
         REGISTRY.frozen = true;
 
-        assertThrows(IllegalStateException.class, () -> ServiceBridge.register(new StubService()));
+        assertThrows(
+            IllegalStateException.class,
+            () -> ServiceBridge.register(new StubService(), ServicePriority.ADDON));
     }
 
     private static final class Registration {

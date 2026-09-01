@@ -99,11 +99,30 @@ class EconomyApiTest {
 
         StubService service = new StubService();
         StubEvents events = new StubEvents();
-        EconomyApi.install(service, events);
+        EconomyApi.install(() -> service, events);
         assertSame(service, EconomyApi.service());
         assertSame(events, EconomyApi.events());
         assertThrows(NullPointerException.class, () -> EconomyApi.install(null, events));
-        assertThrows(NullPointerException.class, () -> EconomyApi.install(service, null));
+        assertThrows(NullPointerException.class, () -> EconomyApi.install(() -> service, null));
+    }
+
+    /**
+     * Дверь через {@code EconomyApi} и реестр сервисов ядра обязаны вести к одной реализации. Пока
+     * точка входа держала свой леджер, мод, вытеснивший экономику в реестре, отвечал одними балансами,
+     * а {@code EconomyApi.service()} другими.
+     */
+    @Test
+    void serviceFollowsWhoeverHoldsItInTheRegistry() {
+        StubService builtin = new StubService();
+        StubService replacement = new StubService();
+        java.util.concurrent.atomic.AtomicReference<EconomyService> registry = new java.util.concurrent.atomic.AtomicReference<>(
+            builtin);
+        EconomyApi.install(registry::get, new StubEvents());
+
+        assertSame(builtin, EconomyApi.service());
+
+        registry.set(replacement);
+        assertSame(replacement, EconomyApi.service(), "подмена в реестре видна и через точку входа");
     }
 
     /** Хранилище-заглушка для проверки реестра по имени. */

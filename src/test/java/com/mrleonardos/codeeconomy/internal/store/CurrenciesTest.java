@@ -130,7 +130,28 @@ class CurrenciesTest {
 
     private static EconomyLimits ceilings() {
         return EconomyFixtures.settings()
-            .ceilings();
+            .ceilings(EconomyFixtures.LOG);
     }
 
+    /**
+     * Валюта без maxBalance грузилась с потолком ноль: любая операция по ней отвечала ABOVE_CEILING, и
+     * по логу понять это было нечем, потому что в лог ничего не попадало.
+     */
+    @Test
+    void currencyWithoutMaxBalanceIsSkippedWithALogLine() {
+        JsonObject entry = new JsonObject();
+        entry.addProperty(Currencies.ID, "credit");
+        entry.addProperty(Currencies.DECIMALS, 0);
+        entry.addProperty(Currencies.START_BALANCE, Long.valueOf(100L));
+
+        JsonArray list = new JsonArray();
+        list.add(entry);
+        List<CurrencyRecord> loaded = Currencies.load(file(list), ceilings(), EconomyFixtures.LOG);
+
+        assertEquals(1, loaded.size(), "негодная валюта пропущена, остаётся заводская");
+        assertEquals(
+            CurrencyIds.DEFAULT,
+            loaded.get(0)
+                .id());
+    }
 }

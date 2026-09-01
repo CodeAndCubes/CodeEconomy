@@ -229,4 +229,39 @@ class RecoveryTest {
             .cause(ChangeCause.COMMAND)
             .build();
     }
+
+    /**
+     * Строка с потерянным after-балансом раньше разбиралась с нулём вместо него, и replay обнулял счёт
+     * абсолютным присваиванием. Ни одна проверка этого не ловила: обнуление уходило без единой строки в
+     * отчёте. Теперь такая строка негодна целиком и идёт штатным путём битой середины.
+     */
+    @Test
+    void aSideWithoutANumericAfterMakesTheWholeLineUnusable() {
+        assertNull(
+            JournalCodec.decode(
+                "{\"v\":1,\"seq\":1,\"ts\":1000,\"transactionId\":\"tx1\",\"kind\":\"DEPOSIT\","
+                    + "\"currencyId\":\"coin\",\"to\":\"00000000-0000-0000-0000-0000000000a1\",\"cause\":\"COMMAND\"}"),
+            "получатель без toAfter");
+        assertNull(
+            JournalCodec.decode(
+                "{\"v\":1,\"seq\":1,\"ts\":1000,\"transactionId\":\"tx1\",\"kind\":\"DEPOSIT\","
+                    + "\"currencyId\":\"coin\",\"to\":\"00000000-0000-0000-0000-0000000000a1\","
+                    + "\"toAfter\":\"much\",\"cause\":\"COMMAND\"}"),
+            "нечисловой toAfter");
+    }
+
+    @Test
+    void damagedLineWithALostAfterGoesToQuarantineInsteadOfZeroingTheAccount() throws Exception {
+        Path journal = journal("lost-after");
+        write(
+            journal,
+            line(deposit(1L, 1000L, 26000L)),
+            "{\"v\":1,\"seq\":2,\"ts\":2000,\"transactionId\":\"tx2\",\"kind\":\"DEPOSIT\","
+                + "\"currencyId\":\"coin\",\"to\":\"00000000-0000-0000-0000-0000000000b2\",\"cause\":\"COMMAND\"}",
+            line(deposit(3L, 3000L, 27000L)));
+
+        Recovery.Result result = Recovery.recover(new LinkedHashMap<UUID, AccountView>(), journal, 0L, start(), null);
+
+        assertFalse(result.corruption() == null, "битая середина поднимает карантин");
+    }
 }

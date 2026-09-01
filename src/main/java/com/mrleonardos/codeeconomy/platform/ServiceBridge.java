@@ -8,8 +8,8 @@ final class ServiceBridge {
 
     private ServiceBridge() {}
 
-    static void register(EconomyService implementation) {
+    static void register(EconomyService implementation, ServicePriority priority) {
         CodeApi.services()
-            .register(EconomyService.class, implementation, ServicePriority.BUILTIN);
+            .register(EconomyService.class, implementation, priority);
     }
 }

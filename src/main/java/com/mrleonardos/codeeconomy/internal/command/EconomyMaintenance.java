@@ -12,5 +12,8 @@ public interface EconomyMaintenance {
 
     MaintenanceOutcome compact();
 
+    /** Снять карантин носителя: после разбора администратором мутации открываются снова. */
+    MaintenanceOutcome unlock();
+
     MaintenanceOutcome importBalances(String format, String file, boolean apply);
 }

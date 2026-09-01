@@ -24,6 +24,7 @@ import com.mrleonardos.codeeconomy.api.model.TransferResult;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
 import com.mrleonardos.codeeconomy.internal.EconomySettings;
 import com.mrleonardos.codeeconomy.internal.TestConfigs;
+import com.mrleonardos.codeeconomy.internal.engine.Ledger;
 import com.mrleonardos.codeeconomy.internal.guard.PayCooldownGuard;
 import com.mrleonardos.codeeconomy.internal.store.JsonEconomyStore;
 
@@ -44,7 +45,8 @@ class LedgerServiceTest {
 
         assertThrows(
             IllegalStateException.class,
-            () -> service.execute(EconomyFixtures.deposit(EconomyFixtures.ALICE, 10L, "tx1"), ChangeCause.COMMAND));
+            () -> service
+                .execute(EconomyFixtures.deposit(EconomyFixtures.ALICE, 10L, "tx1"), ChangeCause.COMMAND, false));
         assertThrows(
             IllegalStateException.class,
             () -> service.transfer(EconomyFixtures.deposit(EconomyFixtures.ALICE, 10L, "tx2")));
@@ -92,14 +94,16 @@ class LedgerServiceTest {
             service
                 .execute(
                     EconomyFixtures.transfer(EconomyFixtures.ALICE, EconomyFixtures.BOB, 10L, "tx1"),
-                    ChangeCause.COMMAND)
+                    ChangeCause.COMMAND,
+                    false)
                 .code());
         assertEquals(
             ResultCode.GUARD_VETO,
             service
                 .execute(
                     EconomyFixtures.transfer(EconomyFixtures.ALICE, EconomyFixtures.BOB, 10L, "tx2"),
-                    ChangeCause.COMMAND)
+                    ChangeCause.COMMAND,
+                    false)
                 .code());
 
         now.addAndGet(61L * 1000L);
@@ -108,7 +112,8 @@ class LedgerServiceTest {
             service
                 .execute(
                     EconomyFixtures.transfer(EconomyFixtures.ALICE, EconomyFixtures.BOB, 10L, "tx3"),
-                    ChangeCause.COMMAND)
+                    ChangeCause.COMMAND,
+                    false)
                 .code());
     }
 
@@ -151,5 +156,43 @@ class LedgerServiceTest {
             }
         }
         return false;
+    }
+
+    /**
+     * Кулдаун отсчитывается от записанного перевода. Раньше метка ставилась в проверке, до записи, и
+     * отказ носителя запирал игрока на весь кулдаун за перевод, которого не было.
+     */
+    @Test
+    void aRefusedWriteDoesNotStartTheCooldown() {
+        EconomySettings config = EconomyFixtures.settings();
+        config.limits.payCooldownSeconds = 60;
+        EconomyFixtures.MemoryStore store = new EconomyFixtures.MemoryStore();
+        store.refuse = true;
+        Ledger ledger = EconomyFixtures.ledger(
+            store,
+            Collections.singletonList(EconomyFixtures.coin()),
+            config,
+            Collections.singletonList(new PayCooldownGuard(60, now::get)),
+            EconomyFixtures.lookup(),
+            now::get,
+            EconomyFixtures.LOG);
+
+        assertEquals(
+            ResultCode.STORE_FAILURE,
+            ledger
+                .execute(
+                    EconomyFixtures.transfer(EconomyFixtures.ALICE, EconomyFixtures.BOB, 10L, "tx1"),
+                    ChangeCause.COMMAND)
+                .code());
+
+        store.refuse = false;
+        assertEquals(
+            ResultCode.OK,
+            ledger
+                .execute(
+                    EconomyFixtures.transfer(EconomyFixtures.ALICE, EconomyFixtures.BOB, 10L, "tx2"),
+                    ChangeCause.COMMAND)
+                .code(),
+            "перевод, которого не было, кулдаун не запускает");
     }
 }

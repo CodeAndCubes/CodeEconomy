@@ -3,7 +3,6 @@ package com.mrleonardos.codeeconomy.internal.engine;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import com.mrleonardos.codeeconomy.api.model.TransactionRecord;
@@ -86,13 +85,14 @@ public final class RingHistory {
         if (page < 0 || pageSize <= 0) {
             return Collections.emptyList();
         }
-        int skipped = 0;
+        long skip = (long) page * (long) pageSize;
+        long skipped = 0L;
         List<TransactionRecord> found = new ArrayList<>();
         for (TransactionRecord record : newestFirst) {
             if (!touches(record, player)) {
                 continue;
             }
-            if (skipped < page * pageSize) {
+            if (skipped < skip) {
                 skipped++;
                 continue;
             }
@@ -106,19 +106,6 @@ public final class RingHistory {
 
     public int size() {
         return newestFirst.size();
-    }
-
-    public Optional<TransactionRecord> newest() {
-        return newestFirst.isEmpty() ? Optional.<TransactionRecord>empty() : Optional.of(newestFirst.get(0));
-    }
-
-    /** Наибольший {@code seq} в истории, для пустой истории ноль. */
-    public long newestSeq() {
-        long highest = 0L;
-        for (TransactionRecord record : newestFirst) {
-            highest = Math.max(highest, record.seq());
-        }
-        return highest;
     }
 
     public long oldestTs() {

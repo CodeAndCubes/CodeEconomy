@@ -4,6 +4,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -11,22 +12,28 @@ import java.util.function.Supplier;
 
 import org.apache.logging.log4j.Logger;
 
+import com.mrleonardos.codeeconomy.api.Amounts;
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
 import com.mrleonardos.codeeconomy.api.model.ChangeCause;
 import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
 import com.mrleonardos.codeeconomy.api.model.ResultCode;
 import com.mrleonardos.codeeconomy.api.model.TransferRequest;
+import com.mrleonardos.codeeconomy.api.model.TransferResult;
+import com.mrleonardos.codeeconomy.api.store.CheckpointResult;
 import com.mrleonardos.codeeconomy.api.store.StoreResult;
+import com.mrleonardos.codeeconomy.api.store.StoreVerification;
 import com.mrleonardos.codeeconomy.internal.command.EconomyMaintenance;
 import com.mrleonardos.codeeconomy.internal.command.EconomyMessages;
 import com.mrleonardos.codeeconomy.internal.command.MaintenanceOutcome;
 import com.mrleonardos.codeeconomy.internal.service.LedgerService;
 import com.mrleonardos.codeeconomy.internal.store.BalanceImporters;
-import com.mrleonardos.codeeconomy.internal.store.Recovery;
 
 final class PlatformMaintenance implements EconomyMaintenance {
 
     private static final String IMPORT_PREFIX = "import:";
+
+    /** Сколько принятых строк показать в отчёте без {@code --apply}: длиннее чат всё равно не примет. */
+    private static final int PREVIEW_ROWS = 20;
 
     private final LedgerService service;
     private final EconomyLimits limits;
@@ -69,14 +76,19 @@ final class PlatformMaintenance implements EconomyMaintenance {
     @Override
     public MaintenanceOutcome verify() {
         verifier.execute(() -> {
-            Recovery.Verification verification = service.verifyDetailed();
+            StoreVerification verification = service.verifyDetailed();
             for (String finding : verification.findings()) {
                 log.warn("Economy verify: {}", finding);
             }
-            if (verification.skipped() > 0L) {
+            if (verification.settled() > 0L) {
                 log.info(
                     "Economy verify skipped {} journal line(s) at or below the checkpoint, their balances are in the checkpoint",
-                    verification.skipped());
+                    Long.valueOf(verification.settled()));
+            }
+            if (verification.ahead() > 0L) {
+                log.info(
+                    "Economy verify skipped {} journal line(s) written while it was running, they are past the snapshot",
+                    Long.valueOf(verification.ahead()));
             }
             if (verification.findings()
                 .isEmpty()) {
@@ -84,8 +96,9 @@ final class PlatformMaintenance implements EconomyMaintenance {
             } else {
                 log.warn(
                     "Economy verify finished with {} finding(s), first: {}",
-                    verification.findings()
-                        .size(),
+                    Integer.valueOf(
+                        verification.findings()
+                            .size()),
                     verification.findings()
                         .get(0));
             }
@@ -99,12 +112,11 @@ final class PlatformMaintenance implements EconomyMaintenance {
         if (refused != null) {
             return refused;
         }
-        StoreResult stored = service.checkpoint();
-        return stored.successful() ? MaintenanceOutcome.success(
-            service.ledger()
-                .state()
-                .checkpointSeq())
-            : MaintenanceOutcome.failure(ResultCode.STORE_FAILURE);
+        CheckpointResult written = service.checkpoint();
+        if (!written.successful()) {
+            return MaintenanceOutcome.failure(ResultCode.STORE_FAILURE);
+        }
+        return MaintenanceOutcome.success(written.seq(), Boolean.valueOf(written.written()));
     }
 
     @Override
@@ -122,6 +134,18 @@ final class PlatformMaintenance implements EconomyMaintenance {
     }
 
     @Override
+    public MaintenanceOutcome unlock() {
+        if (!service.readOnly()) {
+            return MaintenanceOutcome.success(0L);
+        }
+        StoreResult lifted = service.unlock();
+        if (!lifted.successful()) {
+            return MaintenanceOutcome.failure(ResultCode.STORE_FAILURE);
+        }
+        return MaintenanceOutcome.success(1L);
+    }
+
+    @Override
     public MaintenanceOutcome importBalances(String format, String file, boolean apply) {
         MaintenanceOutcome refused = guard();
         if (refused != null) {
@@ -135,27 +159,33 @@ final class PlatformMaintenance implements EconomyMaintenance {
         if (currency == null) {
             return MaintenanceOutcome.failure(ResultCode.UNKNOWN_CURRENCY);
         }
-        BalanceImporters.Imported imported = BalanceImporters.read(format, resolve(file), currency, limits);
-        long moved = applyImport(format, resolve(file), currency, imported, apply);
-        MaintenanceOutcome outcome = MaintenanceOutcome.success(
+        Path source = resolve(file);
+        BalanceImporters.Imported imported = BalanceImporters.read(format, source, currency, limits);
+        List<MaintenanceOutcome.Row> rows = new ArrayList<>();
+        long moved = applyImport(format, source, currency, imported, apply, rows);
+        preview(imported, currency, apply, rows);
+        for (String rejection : imported.rejected()) {
+            rows.add(MaintenanceOutcome.Row.of(EconomyMessages.IMPORT_SKIP, rejection));
+        }
+        return MaintenanceOutcome.success(
             0L,
-            rows(imported),
+            rows,
             Long.valueOf(moved),
             Long.valueOf(
                 imported.rejected()
                     .size()));
-        return outcome;
     }
 
     private long applyImport(String format, Path source, CurrencyRecord currency, BalanceImporters.Imported imported,
-        boolean apply) {
+        boolean apply, List<MaintenanceOutcome.Row> rows) {
+        if (!apply) {
+            return imported.accepted()
+                .size();
+        }
+        String reason = reason(format, source);
         long moved = 0L;
-        for (java.util.Map.Entry<UUID, Long> entry : imported.accepted()
+        for (Map.Entry<UUID, Long> entry : imported.accepted()
             .entrySet()) {
-            if (!apply) {
-                moved++;
-                continue;
-            }
             TransferRequest request = TransferRequest.set(
                 entry.getKey(),
                 entry.getValue()
@@ -163,22 +193,56 @@ final class PlatformMaintenance implements EconomyMaintenance {
                 currency.id(),
                 IMPORT_PREFIX + currency.id() + ":" + entry.getKey(),
                 null,
-                "imported " + format + " from " + source.getFileName());
-            if (service.ledger()
-                .execute(request, ChangeCause.MIGRATION)
-                .applied()) {
+                reason);
+            TransferResult result = service.ledger()
+                .execute(request, ChangeCause.MIGRATION);
+            if (result.applied()) {
                 moved++;
+                continue;
             }
+            rows.add(MaintenanceOutcome.Row.of(EconomyMessages.IMPORT_SKIP, entry.getKey() + ": " + result.code()));
         }
         return moved;
     }
 
-    private List<MaintenanceOutcome.Row> rows(BalanceImporters.Imported imported) {
-        List<MaintenanceOutcome.Row> rows = new ArrayList<>();
-        for (String rejection : imported.rejected()) {
-            rows.add(MaintenanceOutcome.Row.of(EconomyMessages.IMPORT_SKIP, rejection));
+    /**
+     * Причина записи журнала для импорта, обрезанная под потолок причины. Без обрезки длинное имя
+     * каталога отклоняло бы каждую строку кодом INVALID_REQUEST, и отчёт показывал бы ноль без
+     * объяснения.
+     */
+    private String reason(String format, Path source) {
+        String reason = "imported " + format + " from " + source.getFileName();
+        return reason.length() <= limits.reasonLength() ? reason : reason.substring(0, limits.reasonLength());
+    }
+
+    /** Построчный показ принятых пар: без него отчёт сухого прогона нечем проверить. */
+    private static void preview(BalanceImporters.Imported imported, CurrencyRecord currency, boolean apply,
+        List<MaintenanceOutcome.Row> rows) {
+        if (apply) {
+            return;
         }
-        return rows;
+        int shown = 0;
+        for (Map.Entry<UUID, Long> entry : imported.accepted()
+            .entrySet()) {
+            if (shown >= PREVIEW_ROWS) {
+                rows.add(
+                    MaintenanceOutcome.Row.of(
+                        EconomyMessages.IMPORT_MORE,
+                        Integer.valueOf(
+                            imported.accepted()
+                                .size() - shown)));
+                return;
+            }
+            rows.add(
+                MaintenanceOutcome.Row.of(
+                    EconomyMessages.IMPORT_ROW,
+                    entry.getKey(),
+                    Amounts.format(
+                        entry.getValue()
+                            .longValue(),
+                        currency)));
+            shown++;
+        }
     }
 
     private Path resolve(String file) {

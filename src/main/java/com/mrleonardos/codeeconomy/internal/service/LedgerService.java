@@ -24,15 +24,17 @@ import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
 import com.mrleonardos.codeeconomy.api.model.TransactionRecord;
 import com.mrleonardos.codeeconomy.api.model.TransferRequest;
 import com.mrleonardos.codeeconomy.api.model.TransferResult;
+import com.mrleonardos.codeeconomy.api.store.CheckpointResult;
 import com.mrleonardos.codeeconomy.api.store.EconomyStore;
 import com.mrleonardos.codeeconomy.api.store.StoreResult;
+import com.mrleonardos.codeeconomy.api.store.StoreVerification;
 import com.mrleonardos.codeeconomy.internal.EconomySettings;
 import com.mrleonardos.codeeconomy.internal.engine.Ledger;
 import com.mrleonardos.codeeconomy.internal.event.EventDispatcher;
 import com.mrleonardos.codeeconomy.internal.guard.GuardChain;
 import com.mrleonardos.codeeconomy.internal.guard.PayCooldownGuard;
+import com.mrleonardos.codeeconomy.internal.store.Currencies;
 import com.mrleonardos.codeeconomy.internal.store.JsonEconomyStore;
-import com.mrleonardos.codeeconomy.internal.store.Recovery;
 
 /**
  * Реализация {@link EconomyService}: деньги сервера.
@@ -41,66 +43,51 @@ import com.mrleonardos.codeeconomy.internal.store.Recovery;
  * Чтения работают из любого потока по последнему записанному состоянию. Мутации исполняет один писатель
  * в главном потоке: вызов оттуда исполняется сразу, из чужого потока бросается
  * {@code IllegalStateException}, а {@code submit()} ставит операцию в ближайший тик. Внутренние
- * вызывающие, например команды, зовут {@link #execute(TransferRequest, ChangeCause)} с нужной причиной
- * для аудита.
+ * вызывающие, например команды, зовут {@link #execute(TransferRequest, ChangeCause, boolean)} с нужной
+ * причиной для аудита.
  */
 public final class LedgerService implements EconomyService {
 
     public static final String IMPLEMENTATION = "com.mrleonardos.codeeconomy.internal.service.LedgerService";
 
     private final Ledger ledger;
-    private final JsonEconomyStore builtin;
-    private final EconomyStore store;
     private final Scheduler scheduler;
     private final BooleanSupplier mainThread;
     private final LongSupplier ticks;
 
-    private LedgerService(Ledger ledger, JsonEconomyStore builtin, EconomyStore store, Scheduler scheduler,
-        BooleanSupplier mainThread, LongSupplier ticks) {
+    private LedgerService(Ledger ledger, Scheduler scheduler, BooleanSupplier mainThread, LongSupplier ticks) {
         this.ledger = ledger;
-        this.builtin = builtin;
-        this.store = store;
         this.scheduler = scheduler;
         this.mainThread = mainThread;
         this.ticks = ticks;
     }
 
     /**
-     * Собрать сервис: провайдер по настройке, пустое состояние, слушатели и гварды на местах.
+     * Собрать сервис: пустое состояние, слушатели на местах.
      *
      * <p>
-     * Состояние мира на этот момент ещё не открыто, поэтому загрузка идет отдельно, в
+     * Провайдер и цепочка гвардов выбираются лениво, при первом обращении к деньгам. Реестры
+     * {@code EconomyApi} открыты всю фазу инициализации, а мод, загруженный после codeeconomy,
+     * регистрируется в своём init: посчитай мы провайдера сразу, его SqlStore молча остался бы за
+     * бортом. Состояние мира на этот момент тоже не открыто, поэтому загрузка идёт отдельно, в
      * {@link #loadWorld()} при старте мира.
      */
     public static LedgerService create(EconomySettings config, List<CurrencyRecord> currencies,
         ConfigFile<JsonObject> checkpointFile, Scheduler scheduler, BooleanSupplier mainThread, LongSupplier ticks,
         LongSupplier clock, PlayerLookup lookup, Logger log) {
         EconomyLimits limits = config.ceilings(log);
-        long idempotencyMillis = config.idempotencyMillis();
-        JsonEconomyStore builtin = new JsonEconomyStore(
-            checkpointFile,
-            limits,
-            JsonEconomyStore.starting(currencies),
-            readOnlyOnCorrupt(config, log),
-            idempotencyMillis,
-            clock,
-            log);
-        EconomyStore store = resolveProvider(config.provider(), builtin, log);
-        GuardChain guards = GuardChain.of(builtinGuards(config, clock), config.guards.failOpen, log);
-        EventDispatcher events = new EventDispatcher(log);
         Ledger ledger = new Ledger(
-            store,
-            builtin,
+            () -> resolveProvider(config, currencies, checkpointFile, clock, limits, log),
             currencies,
             config.currencyId(),
             config,
             limits,
-            guards,
-            events,
+            () -> GuardChain.of(builtinGuards(config, clock), config.guards.failOpen, log),
+            new EventDispatcher(log),
             lookup,
             clock,
             log);
-        return new LedgerService(ledger, builtin, store, scheduler, mainThread, ticks);
+        return new LedgerService(ledger, scheduler, mainThread, ticks);
     }
 
     /**
@@ -116,27 +103,41 @@ public final class LedgerService implements EconomyService {
         return guards;
     }
 
-    static EconomyStore resolveProvider(String configured, JsonEconomyStore builtin, Logger log) {
+    /**
+     * Активный провайдер: зарегистрированный под именем из {@code storage.provider}, иначе встроенный
+     * json. Уход на встроенный это авария конфигурации, поэтому в лог попадает и запрошенное имя, и
+     * перечень того, что вообще зарегистрировано.
+     */
+    static EconomyStore resolveProvider(EconomySettings config, List<CurrencyRecord> currencies,
+        ConfigFile<JsonObject> checkpointFile, LongSupplier clock, EconomyLimits limits, Logger log) {
+        String configured = config.provider();
         Optional<EconomyStore> foreign = EconomyApi.store(configured);
         if (foreign.isPresent()) {
             log.info("Economy storage provider is {}", configured);
             return foreign.get();
         }
         if (!JsonEconomyStore.ID.equals(configured)) {
-            log.warn("Storage provider {} is not registered, falling back to {}", configured, JsonEconomyStore.ID);
+            log.warn(
+                "Storage provider {} is not registered, falling back to {}. Registered providers: {}",
+                configured,
+                JsonEconomyStore.ID,
+                registeredIds());
         }
-        return builtin;
+        return new JsonEconomyStore(
+            checkpointFile,
+            limits,
+            Currencies.startBalances(currencies),
+            config.idempotencyMillis(),
+            clock,
+            log);
     }
 
-    private static boolean readOnlyOnCorrupt(EconomySettings config, Logger log) {
-        if (EconomySettings.DEFAULT_ON_CORRUPT.equalsIgnoreCase(config.storage.onCorrupt)) {
-            return true;
+    private static List<String> registeredIds() {
+        List<String> ids = new ArrayList<>();
+        for (EconomyStore store : EconomyApi.stores()) {
+            ids.add(store.id());
         }
-        log.warn(
-            "Unknown storage.onCorrupt value {}, the safe {} is used",
-            config.storage.onCorrupt,
-            EconomySettings.DEFAULT_ON_CORRUPT);
-        return true;
+        return ids;
     }
 
     @Override
@@ -172,27 +173,27 @@ public final class LedgerService implements EconomyService {
 
     @Override
     public TransferResult transfer(TransferRequest request) {
-        return execute(request, ChangeCause.API);
+        return execute(request);
     }
 
     @Override
     public TransferResult deposit(TransferRequest request) {
-        return execute(request, ChangeCause.API);
+        return execute(request);
     }
 
     @Override
     public TransferResult withdraw(TransferRequest request) {
-        return execute(request, ChangeCause.API);
+        return execute(request);
     }
 
     @Override
     public TransferResult set(TransferRequest request) {
-        return execute(request, ChangeCause.API);
+        return execute(request);
     }
 
     @Override
     public TransferResult reset(TransferRequest request) {
-        return execute(request, ChangeCause.API);
+        return execute(request);
     }
 
     @Override
@@ -219,28 +220,30 @@ public final class LedgerService implements EconomyService {
     }
 
     /**
-     * Провести операцию с причиной для аудита. Внутренний вход для команд и обслуживания, чужие моды
-     * пользуются методами интерфейса.
+     * Провести операцию с причиной для аудита и решённым обходом пола. Внутренний вход для команд и
+     * обслуживания, чужие моды пользуются методами интерфейса.
      *
+     * @param floorBypass право {@code codeeconomy.bypass.minbalance} у отправителя команды, спрошенное
+     *                    швом команд: для консоли, у которой нет uuid, движку это не узнать
      * @throws IllegalStateException если вызов пришёл не из главного потока
      */
-    public TransferResult execute(TransferRequest request, ChangeCause cause) {
+    public TransferResult execute(TransferRequest request, ChangeCause cause, boolean floorBypass) {
         requireMainThread();
-        return ledger.execute(request, cause);
+        return ledger.execute(request, cause, floorBypass);
     }
 
-    /** Сверка журнала с текущим состоянием, отчёт называет расхождения. */
-    public List<String> verify() {
-        return ledger.verify();
+    private TransferResult execute(TransferRequest request) {
+        requireMainThread();
+        return ledger.execute(request, ChangeCause.API);
     }
 
-    /** Та же сверка с числом пропущенных строк: для отчёта администратору. */
-    public Recovery.Verification verifyDetailed() {
+    /** Сверка состояния с носителем: для отчёта администратору. */
+    public StoreVerification verifyDetailed() {
         return ledger.verifyDetailed();
     }
 
     /** Принудительный снимок состояния. */
-    public StoreResult checkpoint() {
+    public CheckpointResult checkpoint() {
         requireMainThread();
         return ledger.checkpoint();
     }
@@ -251,9 +254,15 @@ public final class LedgerService implements EconomyService {
         return ledger.compact();
     }
 
+    /** Снять карантин носителя и открыть мутации. */
+    public StoreResult unlock() {
+        requireMainThread();
+        return ledger.liftReadOnly();
+    }
+
     /** Поднять состояние из провайдера и сообщить слушателям итог восстановления. Идёт при старте мира. */
     public void loadWorld() {
-        ledger.start(store.load());
+        ledger.loadWorld();
     }
 
     /** Записать чекпоинт, если счета накопились. */
@@ -267,11 +276,9 @@ public final class LedgerService implements EconomyService {
             .flushTick();
     }
 
-    /** Закрыть носитель: журнал больше не принимает записи. */
+    /** Закрыть носитель: новых записей не будет. */
     public void close() {
-        if (builtin != null) {
-            builtin.closeQuietly();
-        }
+        ledger.close();
     }
 
     /** Движок: для команд, которым нужны гварды, история и топ целиком. */

@@ -34,7 +34,6 @@ class RingHistoryTest {
                 .get(1)
                 .seq());
         assertEquals(2, history.size());
-        assertEquals(2L, history.newestSeq());
         assertEquals(1000L, history.oldestTs());
     }
 

@@ -47,6 +47,16 @@ class PlatformMaintenanceImportTest {
             outcome.values()
                 .get(0),
             "в отчёт попадают обе строки источника");
+        assertEquals(
+            2,
+            outcome.rows()
+                .size(),
+            "сухой прогон показывает принятые пары построчно");
+        assertEquals(
+            EconomyMessages.IMPORT_ROW,
+            outcome.rows()
+                .get(0)
+                .key());
         assertEquals(25000L, service.balance(EconomyFixtures.ALICE, "coin"), "без --apply балансы не трогаются");
         assertFalse(Files.exists(journal()), "без --apply журнал не появляется");
         assertTrue(Files.exists(source), "источник импорта остаётся на месте");
@@ -88,18 +98,18 @@ class PlatformMaintenanceImportTest {
 
         assertTrue(outcome.successful());
         assertEquals(
-            1,
+            2,
             outcome.rows()
                 .size(),
-            "отклонённая строка объясняется отдельно");
+            "принятая пара и отклонённая строка объясняются отдельно");
         assertEquals(
             EconomyMessages.IMPORT_SKIP,
             outcome.rows()
-                .get(0)
+                .get(1)
                 .key());
         assertTrue(
             outcome.rows()
-                .get(0)
+                .get(1)
                 .arguments()
                 .get(0)
                 .toString()
@@ -151,7 +161,7 @@ class PlatformMaintenanceImportTest {
     }
 
     private Path source() throws Exception {
-        return write("import.json", "{\"" + ALICE + "\": 12.50, \"" + BOB + "\": 100}");
+        return write("import.json", "{\"" + ALICE + "\": 1250, \"" + BOB + "\": 10000}");
     }
 
     private Path write(String name, String content) throws Exception {
@@ -169,5 +179,29 @@ class PlatformMaintenanceImportTest {
     private String[] journalLines() throws Exception {
         List<String> lines = Files.readAllLines(journal(), StandardCharsets.UTF_8);
         return lines.toArray(new String[0]);
+    }
+
+    /**
+     * Причина записи склеивается из формата и имени файла и упиралась в потолок причины: каждая строка
+     * отклонялась INVALID_REQUEST на разборе, а отчёт показывал ноль перенесённых без объяснения.
+     */
+    @Test
+    void aLongSourceNameDoesNotBlockTheWholeImport() throws Exception {
+        StringBuilder name = new StringBuilder();
+        for (int index = 0; index < 150; index++) {
+            name.append('n');
+        }
+        Path source = write(name + ".json", "{\"" + ALICE + "\": 1250}");
+        LedgerService service = service();
+
+        MaintenanceOutcome outcome = maintenance(service).importBalances("flatjson", source.toString(), true);
+
+        assertTrue(outcome.successful());
+        assertEquals(
+            Long.valueOf(1L),
+            outcome.values()
+                .get(0),
+            "длинное имя источника перенос не ломает");
+        assertEquals(1250L, service.balance(EconomyFixtures.ALICE, "coin"));
     }
 }

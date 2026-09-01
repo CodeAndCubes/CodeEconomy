@@ -22,9 +22,12 @@ import com.mrleonardos.codeeconomy.api.model.AccountView;
 import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
 import com.mrleonardos.codeeconomy.api.model.TransactionRecord;
 import com.mrleonardos.codeeconomy.api.store.ChangeBatch;
+import com.mrleonardos.codeeconomy.api.store.CheckpointResult;
 import com.mrleonardos.codeeconomy.api.store.EconomyStore;
+import com.mrleonardos.codeeconomy.api.store.StoreMaintenance;
 import com.mrleonardos.codeeconomy.api.store.StoreResult;
 import com.mrleonardos.codeeconomy.api.store.StoreSnapshot;
+import com.mrleonardos.codeeconomy.api.store.StoreVerification;
 import com.mrleonardos.codeeconomy.internal.EconomySettings;
 
 /**
@@ -33,14 +36,20 @@ import com.mrleonardos.codeeconomy.internal.EconomySettings;
  *
  * <p>
  * Журнал и есть истина: {@code apply} дописывает строку с принудительным сбросом на диск и только
- * после этого вносит счета в чекпоинт. Отказ записи виден вызывающему как отказ, состояния в памяти он
- * не меняет, а файл возвращается к прежней длине, поэтому хвост журнала остаётся чистым.
+ * после этого счета считаются проведёнными. Отказ записи виден вызывающему как отказ, состояния в
+ * памяти он не меняет, а файл возвращается к прежней длине, поэтому хвост журнала остаётся чистым.
  *
  * <p>
- * {@code /eco compact} обрезает журнал, но оставляет записи свежее окна идемпотентности: повтор
- * {@code transactionId} ловится и после обрезки, пока окно не вышло.
+ * Чекпоинт всегда пишется полным набором счетов вместе с границей, которую они покрывают: граница,
+ * ушедшая вперёд счетов, означала бы, что следующее восстановление пропустит записи журнала и деньги
+ * исчезнут. Поэтому и {@code checkpoint}, и {@code save} принимают состояние движка целиком.
+ *
+ * <p>
+ * {@code /eco compact} обрезает журнал, но оставляет записи свежее окна идемпотентности: хвост
+ * читается с диска, а не из истории в памяти, потому что история ограничена по числу записей и
+ * возрасту и на живом сервере окна не покрывает.
  */
-public final class JsonEconomyStore implements EconomyStore {
+public final class JsonEconomyStore implements EconomyStore, StoreMaintenance {
 
     public static final String ID = "json";
     public static final String JOURNAL_FILE = "journal.jsonl";
@@ -48,20 +57,17 @@ public final class JsonEconomyStore implements EconomyStore {
     private final SnapshotWriter writer;
     private final ConfigFile<JsonObject> checkpointFile;
     private final Recovery.StartBalances start;
-    private final boolean readOnlyOnCorrupt;
     private final long idempotencyMillis;
     private final LongSupplier clock;
     private final Logger log;
 
-    private volatile List<String> findings = Collections.emptyList();
     private JournalAppender journal;
 
     public JsonEconomyStore(ConfigFile<JsonObject> checkpointFile, EconomyLimits limits, Recovery.StartBalances start,
-        boolean readOnlyOnCorrupt, long idempotencyMillis, LongSupplier clock, Logger log) {
+        long idempotencyMillis, LongSupplier clock, Logger log) {
         this.writer = new SnapshotWriter(checkpointFile, limits, log);
         this.checkpointFile = checkpointFile;
         this.start = start;
-        this.readOnlyOnCorrupt = readOnlyOnCorrupt;
         this.idempotencyMillis = idempotencyMillis;
         this.clock = clock;
         this.log = log;
@@ -94,15 +100,7 @@ public final class JsonEconomyStore implements EconomyStore {
 
     /** Стартовые балансы валют: на них опирается счёт, которого журнал ещё не касался. */
     public static Recovery.StartBalances starting(List<CurrencyRecord> currencies) {
-        final Map<String, Long> starting = Currencies.startingBalances(currencies);
-        return new Recovery.StartBalances() {
-
-            @Override
-            public long starting(String currencyId) {
-                Long value = starting.get(currencyId);
-                return value == null ? 0L : value.longValue();
-            }
-        };
+        return Currencies.startBalances(currencies);
     }
 
     @Override
@@ -116,61 +114,78 @@ public final class JsonEconomyStore implements EconomyStore {
         SnapshotWriter.Checkpoint checkpoint = writer.read();
         Recovery.Result result = Recovery
             .recover(checkpoint.accounts(), journalPath, checkpoint.checkpointSeq(), start, log);
-        findings = result.findings();
         if (result.corruption() != null || result.unreadable()) {
-            Path quarantined = Quarantine.quarantine(journalPath, log);
-            closeJournal();
-            if (quarantined != null) {
-                try {
-                    journal().reset();
-                } catch (IOException failure) {
-                    if (log != null) {
-                        log.error("Failed to reset the journal after quarantine: {}", failure.toString());
-                    }
-                }
-            } else if (log != null) {
-                log.error(
-                    "Damaged journal {} stays in place because the move failed, the mod keeps it for inspection",
-                    journalPath);
+            return quarantine(result, checkpoint, journalPath);
+        }
+        StoreSnapshot snapshot = StoreSnapshot.of(result.accounts(), checkpoint.checkpointSeq(), result.records())
+            .withFindings(result.findings());
+        if (checkpoint.quarantine() != null) {
+            log.error(
+                "Storage still carries the quarantine mark from {}: {}. The mod stays read only until /eco unlock",
+                Long.valueOf(
+                    checkpoint.quarantine()
+                        .at()),
+                checkpoint.quarantine()
+                    .reason());
+            return snapshot.readOnly(
+                checkpoint.quarantine()
+                    .reason());
+        }
+        if (result.replayed() > 0L) {
+            writer.markDirty();
+        }
+        log.info(
+            "Recovery replayed {} record(s) after checkpoint {}, {} mismatch(es)",
+            Long.valueOf(result.replayed()),
+            Long.valueOf(checkpoint.checkpointSeq()),
+            Integer.valueOf(
+                result.findings()
+                    .size()));
+        return snapshot;
+    }
+
+    /**
+     * Битый или нечитаемый журнал: то, что удалось поднять, сразу уходит в чекпоинт, журнал убирается,
+     * а признак карантина ложится в состояние мира. Без признака следующий старт увидел бы здоровый
+     * чекпоинт и молча продолжил работу с потерянными деньгами.
+     */
+    private StoreSnapshot quarantine(Recovery.Result result, SnapshotWriter.Checkpoint checkpoint, Path journalPath) {
+        Path moved = Quarantine.quarantine(journalPath, log);
+        closeJournal();
+        if (moved != null) {
+            try {
+                journal().reset();
+            } catch (IOException failure) {
+                log.error("Failed to reset the journal after quarantine: {}", failure.toString());
             }
-            String reason = result.unreadable() ? "journal " + journalPath.getFileName() + " cannot be read"
-                : "journal is quarantined at " + (quarantined == null ? journalPath : quarantined)
-                    + ", lost seq range "
-                    + result.corruption();
-            return readOnly(result, checkpoint, reason);
+        } else {
+            log.error(
+                "Damaged journal {} stays in place because the move failed, the mod keeps it for inspection",
+                journalPath);
         }
-        if (log != null) {
-            log.info(
-                "Recovery replayed {} record(s) after checkpoint {}, {} mismatch(es)",
-                Long.valueOf(result.replayed()),
-                Long.valueOf(checkpoint.checkpointSeq()),
-                Integer.valueOf(
-                    result.findings()
-                        .size()));
-        }
-        return StoreSnapshot.of(result.accounts(), checkpoint.checkpointSeq(), result.records());
-    }
-
-    private StoreSnapshot readOnly(Recovery.Result result, SnapshotWriter.Checkpoint checkpoint, String reason) {
-        StoreSnapshot snapshot = StoreSnapshot.of(result.accounts(), checkpoint.checkpointSeq(), result.records());
-        if (!readOnlyOnCorrupt) {
-            return snapshot;
-        }
-        return StoreSnapshot.readOnly(snapshot, reason);
-    }
-
-    private void closeJournal() {
+        String reason = result.unreadable() ? "journal " + journalPath.getFileName() + " cannot be read"
+            : "journal is quarantined at " + (moved == null ? journalPath : moved.getFileName())
+                + ", lost seq range "
+                + result.corruption();
+        long recovered = Math.max(checkpoint.checkpointSeq(), highestSeq(result.records()));
+        Quarantine.Mark mark = new Quarantine.Mark(clock.getAsLong(), reason);
         try {
-            journal().close();
-        } catch (IOException failure) {
-            if (log != null) {
-                log.warn("Failed to close the journal before the move: {}", failure.toString());
-            }
+            writer.write(result.accounts(), recovered, mark);
+        } catch (RuntimeException failure) {
+            log.error("Failed to record the quarantine mark in {}: {}", writer.path(), failure.toString());
         }
+        return StoreSnapshot.of(result.accounts(), recovered, result.records())
+            .withFindings(result.findings())
+            .readOnly(reason);
     }
 
     @Override
     public StoreResult apply(ChangeBatch batch) {
+        if (batch.records()
+            .isEmpty()) {
+            writer.markDirty();
+            return StoreResult.success();
+        }
         StringBuilder encoded = new StringBuilder();
         for (TransactionRecord record : batch.records()) {
             if (encoded.length() > 0) {
@@ -186,86 +201,115 @@ public final class JsonEconomyStore implements EconomyStore {
             }
             journal().append(encoded.toString());
         } catch (IOException failure) {
-            if (journal().rollbackFailed() && log != null) {
+            if (journal().rollbackFailed()) {
                 log.error(
                     "Failed to roll the journal back after a refused write, the tail may hold a partial line: {}",
                     failure.toString());
             }
             return StoreResult.failure(StoreResult.Failure.WRITE_FAILED, failure.toString());
         }
-        writer.stage(batch.upserts(), lastSeq(batch.records()));
+        writer.markDirty();
         return StoreResult.success();
     }
 
     @Override
     public StoreResult save(StoreSnapshot snapshot) {
+        List<String> tail = idempotencyTail();
         try {
-            writer.save(snapshot.lastSeq());
-            journal().rewrite(idempotencyTail(snapshot));
+            writer.write(snapshot.accounts(), snapshot.lastSeq(), null);
+        } catch (RuntimeException failure) {
+            return StoreResult.failure(StoreResult.Failure.WRITE_FAILED, failure.toString());
+        }
+        try {
+            journal().rewrite(tail);
         } catch (IOException failure) {
             return StoreResult.failure(StoreResult.Failure.WRITE_FAILED, failure.toString());
         }
         return StoreResult.success();
     }
 
-    /**
-     * Хвост журнала, который переживает обрезку: записи свежее окна идемпотентности. Повтор
-     * {@code transactionId} ловится и после {@code compact}, пока окно не вышло.
-     */
-    private List<String> idempotencyTail(StoreSnapshot snapshot) {
-        if (idempotencyMillis <= 0L) {
-            return Collections.emptyList();
+    @Override
+    public CheckpointResult checkpoint(StoreSnapshot state) {
+        if (!writer.dirty()) {
+            return CheckpointResult.upToDate(writer.checkpointSeq());
         }
-        long cutoff = clock.getAsLong() - idempotencyMillis;
-        List<String> tail = new ArrayList<>();
-        for (TransactionRecord record : snapshot.transactions()) {
-            if (record.ts() >= cutoff) {
-                tail.add(JournalCodec.encode(record));
-            }
+        try {
+            writer.write(state.accounts(), state.lastSeq(), null);
+        } catch (RuntimeException failure) {
+            return CheckpointResult.failure(StoreResult.failure(StoreResult.Failure.WRITE_FAILED, failure.toString()));
         }
-        return tail;
+        return CheckpointResult.written(state.lastSeq());
     }
 
-    /** Записать чекпоинт, если после последней записи накопились счета. Журнал не трогает. */
-    public boolean flushCheckpoint() {
-        return writer.saveIfDirty();
-    }
-
-    /** Расхождения, найденные при последней загрузке журнала. */
-    public List<String> lastFindings() {
-        return findings;
-    }
-
-    /**
-     * Сверка текущих счетов с журналом: строки свежее границы чекпоинта ложатся на чекпоинт из файла,
-     * итог сравнивается с тем, что движок держит в памяти. Безопасно из фонового потока.
-     */
-    public Recovery.Verification verify(Map<UUID, AccountView> current) {
+    @Override
+    public StoreVerification verify(Map<UUID, AccountView> accounts, long upToSeq) {
         SnapshotWriter.Checkpoint checkpoint = writer.read();
         return Recovery.verifyFromCheckpoint(
             checkpoint.accounts(),
             checkpoint.checkpointSeq(),
             journalPath(checkpointFile),
-            current,
+            accounts,
+            upToSeq,
             start);
+    }
+
+    @Override
+    public StoreResult liftReadOnly() {
+        try {
+            writer.clearQuarantine();
+        } catch (RuntimeException failure) {
+            return StoreResult.failure(StoreResult.Failure.WRITE_FAILED, failure.toString());
+        }
+        return StoreResult.success();
+    }
+
+    /**
+     * Хвост журнала, который переживает обрезку: строки свежее окна идемпотентности, прочитанные с
+     * диска. Из кольцевой истории его строить нельзя: она ограничена по числу записей, и на оживлённом
+     * сервере из неё вытесняются операции, чьё окно ещё не вышло.
+     */
+    private List<String> idempotencyTail() {
+        if (idempotencyMillis <= 0L) {
+            return Collections.emptyList();
+        }
+        List<String> lines = Recovery.lines(journalPath(checkpointFile));
+        if (lines == null) {
+            log.warn("Journal cannot be read while compacting, the idempotency tail is dropped");
+            return Collections.emptyList();
+        }
+        long cutoff = clock.getAsLong() - idempotencyMillis;
+        List<String> tail = new ArrayList<>();
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            TransactionRecord record = JournalCodec.decode(trimmed);
+            if (record != null && record.ts() >= cutoff) {
+                tail.add(trimmed);
+            }
+        }
+        return tail;
     }
 
     public Path journalPath() {
         return journal().path();
     }
 
-    public void close() throws IOException {
-        journal().close();
-    }
-
-    /** Закрыть журнал при остановке сервера, отказ закрытия не поднимается наверх. */
-    public void closeQuietly() {
+    @Override
+    public void close() {
         try {
             journal().close();
         } catch (IOException failure) {
-            if (log != null) {
-                log.warn("Failed to close the journal on shutdown: {}", failure.toString());
-            }
+            log.warn("Failed to close the journal on shutdown: {}", failure.toString());
+        }
+    }
+
+    private void closeJournal() {
+        try {
+            journal().close();
+        } catch (IOException failure) {
+            log.warn("Failed to close the journal before the move: {}", failure.toString());
         }
     }
 
@@ -280,7 +324,7 @@ public final class JsonEconomyStore implements EconomyStore {
         return journal;
     }
 
-    private static long lastSeq(List<TransactionRecord> records) {
+    private static long highestSeq(List<TransactionRecord> records) {
         long highest = 0L;
         for (TransactionRecord record : records) {
             highest = Math.max(highest, record.seq());

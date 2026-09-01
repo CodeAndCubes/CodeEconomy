@@ -75,6 +75,22 @@ public final class GuardChain {
         return Optional.empty();
     }
 
+    /**
+     * Сообщить цепочке о записанной операции: гварды отмечают кулдауны и квоты. Упавший гвард попадает
+     * в лог, остальные всё равно получают уведомление.
+     */
+    public void committed(TransferRequest request) {
+        for (TransferGuard guard : guards) {
+            try {
+                guard.committed(request);
+            } catch (RuntimeException failure) {
+                if (log != null) {
+                    log.warn("Guard {} failed after the write: {}", guard.id(), failure.toString());
+                }
+            }
+        }
+    }
+
     private static final Comparator<TransferGuard> ORDER = new Comparator<TransferGuard>() {
 
         @Override

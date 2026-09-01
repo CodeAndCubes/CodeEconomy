@@ -137,18 +137,35 @@ class LedgerTest {
 
         assertEquals(
             ResultCode.OK,
-            ledger.execute(set(EconomyFixtures.ALICE, 0L, "tx1"), ChangeCause.COMMAND)
+            ledger.execute(set(EconomyFixtures.ALICE, 0L, "tx1"), ChangeCause.COMMAND, true)
                 .code());
         assertEquals(
             ResultCode.OK,
-            ledger.execute(set(EconomyFixtures.ALICE, -500L, "tx2"), ChangeCause.COMMAND)
+            ledger.execute(set(EconomyFixtures.ALICE, -500L, "tx2"), ChangeCause.COMMAND, true)
                 .code());
         assertEquals(-500L, balance(ledger, CREDIT, EconomyFixtures.ALICE));
         assertEquals(
             ResultCode.BELOW_FLOOR,
-            ledger.execute(set(EconomyFixtures.ALICE, -501L, "tx3"), ChangeCause.COMMAND)
+            ledger.execute(set(EconomyFixtures.ALICE, -501L, "tx3"), ChangeCause.COMMAND, true)
                 .code());
         assertEquals(2, store.applied.size(), "ниже пола запись не появляется");
+    }
+
+    /**
+     * Находка про пустой actor: пол ниже нуля отдавался всякому, кто не заполнил поле автора, а его
+     * ставит любой вызывающий. Чужой мод уводил игрока в кредит, не имея ни одной ноды.
+     */
+    @Test
+    void aRequestWithoutAnActorGetsNoFloorBypass() {
+        Ledger ledger = creditLedger(account(CREDIT, EconomyFixtures.ALICE, 100L));
+
+        TransferResult result = ledger.execute(
+            TransferRequest.withdraw(EconomyFixtures.ALICE, 200L, CREDIT, "tx1", null, "foreign mod"),
+            ChangeCause.API);
+
+        assertEquals(ResultCode.BELOW_FLOOR, result.code());
+        assertEquals(100L, balance(ledger, CREDIT, EconomyFixtures.ALICE));
+        assertTrue(store.applied.isEmpty(), "до записи дело не доходит");
     }
 
     @Test
@@ -187,17 +204,19 @@ class LedgerTest {
             "незнакомый счёт не создаётся");
     }
 
+    /**
+     * Порядок шагов конвейера задан дизайном: валюта разбирается до суммы. Запрос, негодный сразу по
+     * обоим, обязан ответить именно про валюту, иначе перестановка шагов пройдёт незамеченной.
+     */
     @Test
-    void unknownCurrencyAndBadAmountAreAnsweredBeforeTheGuards() {
+    void unknownCurrencyIsAnsweredBeforeTheAmount() {
         Ledger ledger = coinLedger(account(COIN, EconomyFixtures.ALICE, 1000L));
 
         TransferResult result = ledger.execute(
             TransferRequest.transfer(EconomyFixtures.ALICE, EconomyFixtures.BOB, 0L, "nope", "tx1", null, null),
             ChangeCause.COMMAND);
 
-        assertTrue(
-            result.code() == ResultCode.UNKNOWN_CURRENCY || result.code() == ResultCode.BAD_AMOUNT,
-            "первый шаг отвечает одним из двух кодов, до гвардов дело не доходит");
+        assertEquals(ResultCode.UNKNOWN_CURRENCY, result.code());
         assertTrue(store.applied.isEmpty());
     }
 
