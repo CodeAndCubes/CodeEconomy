@@ -13,9 +13,9 @@ import com.mrleonardos.codecore.api.adapter.RoleOwnerKind;
 import com.mrleonardos.codecore.api.adapter.RoleServices;
 import com.mrleonardos.codecore.api.config.ConfigRoles;
 import com.mrleonardos.codecore.api.util.Scheduler;
+import com.mrleonardos.codeeconomy.api.EconomyCapabilities;
 import com.mrleonardos.codeeconomy.api.EconomyService;
 import com.mrleonardos.codeeconomy.internal.EconomyNodes;
-import com.mrleonardos.codeeconomy.internal.EconomyRole;
 import com.mrleonardos.codeeconomy.internal.EconomySection;
 import com.mrleonardos.codeeconomy.internal.service.PlayerLookup;
 
@@ -84,7 +84,7 @@ public final class ForgeEssentialsAdapter implements RoleAdapter {
 
     @Override
     public Set<RoleCapability> capabilities() {
-        return new HashSet<>(Arrays.asList(EconomyRole.BALANCE, EconomyRole.TRANSFER));
+        return new HashSet<>(Arrays.asList(EconomyCapabilities.BALANCE, EconomyCapabilities.TRANSFER));
     }
 
     @Override

@@ -11,8 +11,8 @@ import com.mrleonardos.codecore.api.adapter.RoleOwnerKind;
 import com.mrleonardos.codecore.api.adapter.RoleServices;
 import com.mrleonardos.codecore.api.config.ConfigRoles;
 import com.mrleonardos.codeeconomy.EconomyConstants;
+import com.mrleonardos.codeeconomy.api.EconomyCapabilities;
 import com.mrleonardos.codeeconomy.api.EconomyService;
-import com.mrleonardos.codeeconomy.internal.EconomyRole;
 import com.mrleonardos.codeeconomy.internal.service.LedgerService;
 
 /**
@@ -58,11 +58,11 @@ public final class LedgerAdapter implements RoleAdapter {
     public Set<RoleCapability> capabilities() {
         return new HashSet<>(
             Arrays.asList(
-                EconomyRole.BALANCE,
-                EconomyRole.TRANSFER,
-                EconomyRole.CURRENCIES,
-                EconomyRole.TOP,
-                EconomyRole.HISTORY));
+                EconomyCapabilities.BALANCE,
+                EconomyCapabilities.TRANSFER,
+                EconomyCapabilities.CURRENCIES,
+                EconomyCapabilities.TOP,
+                EconomyCapabilities.HISTORY));
     }
 
     @Override

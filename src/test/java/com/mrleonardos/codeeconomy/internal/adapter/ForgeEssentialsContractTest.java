@@ -15,11 +15,11 @@ import com.mrleonardos.codecore.api.adapter.RoleCapability;
 import com.mrleonardos.codecore.api.adapter.RoleOwnerKind;
 import com.mrleonardos.codecore.api.config.ConfigRoles;
 import com.mrleonardos.codecore.api.util.Scheduler;
+import com.mrleonardos.codeeconomy.api.EconomyCapabilities;
 import com.mrleonardos.codeeconomy.api.EconomyService;
 import com.mrleonardos.codeeconomy.api.EconomyServiceContract;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
 import com.mrleonardos.codeeconomy.internal.EconomyNodes;
-import com.mrleonardos.codeeconomy.internal.EconomyRole;
 import com.mrleonardos.codeeconomy.internal.EconomySection;
 import com.mrleonardos.codeeconomy.internal.RecordingLogger;
 
@@ -81,11 +81,11 @@ class ForgeEssentialsContractTest extends EconomyServiceContract {
     void theOfferAdmitsWhatItCannotDo() {
         Set<RoleCapability> declared = adapter.capabilities();
 
-        assertTrue(declared.contains(EconomyRole.BALANCE));
-        assertTrue(declared.contains(EconomyRole.TRANSFER));
-        assertFalse(declared.contains(EconomyRole.CURRENCIES), "валюта у чужого мода одна");
-        assertFalse(declared.contains(EconomyRole.HISTORY), "журнала у чужого мода нет");
-        assertFalse(declared.contains(EconomyRole.TOP), "перебрать кошельки чужой мод не даёт");
+        assertTrue(declared.contains(EconomyCapabilities.BALANCE));
+        assertTrue(declared.contains(EconomyCapabilities.TRANSFER));
+        assertFalse(declared.contains(EconomyCapabilities.CURRENCIES), "валюта у чужого мода одна");
+        assertFalse(declared.contains(EconomyCapabilities.HISTORY), "журнала у чужого мода нет");
+        assertFalse(declared.contains(EconomyCapabilities.TOP), "перебрать кошельки чужой мод не даёт");
     }
 
     /** Недоступное умение отвечает пустотой, а не исключением из середины метода. */

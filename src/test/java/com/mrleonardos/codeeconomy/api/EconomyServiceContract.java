@@ -19,7 +19,6 @@ import com.mrleonardos.codeeconomy.api.model.TransactionRecord;
 import com.mrleonardos.codeeconomy.api.model.TransferRequest;
 import com.mrleonardos.codeeconomy.api.model.TransferResult;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
-import com.mrleonardos.codeeconomy.internal.EconomyRole;
 
 /**
  * Один набор проверок на роль денег.
@@ -76,7 +75,7 @@ public abstract class EconomyServiceContract {
     @Test
     @DisplayName("баланс идёт за деньгами на счету")
     void balanceFollowsTheAccount() {
-        assumeSupported(EconomyRole.BALANCE);
+        assumeSupported(EconomyCapabilities.BALANCE);
         long before = service().balance(ALICE, currency());
 
         give(ALICE, 500L);
@@ -87,7 +86,7 @@ public abstract class EconomyServiceContract {
     @Test
     @DisplayName("хватает ли денег считается по балансу")
     void hasComparesWithTheBalance() {
-        assumeSupported(EconomyRole.BALANCE);
+        assumeSupported(EconomyCapabilities.BALANCE);
         give(ALICE, 500L);
         long balance = service().balance(ALICE, currency());
 
@@ -98,7 +97,7 @@ public abstract class EconomyServiceContract {
     @Test
     @DisplayName("счёт виден после первой мутации")
     void theAccountIsSeenAfterAMutation() {
-        assumeSupported(EconomyRole.BALANCE);
+        assumeSupported(EconomyCapabilities.BALANCE);
         give(BOB, 300L);
 
         assertTrue(
@@ -114,7 +113,7 @@ public abstract class EconomyServiceContract {
     @Test
     @DisplayName("незнакомая валюта отвечает отказом, а не пустым балансом")
     void anUnknownCurrencyIsRefused() {
-        assumeSupported(EconomyRole.BALANCE);
+        assumeSupported(EconomyCapabilities.BALANCE);
 
         TransferResult result = service()
             .deposit(TransferRequest.deposit(ALICE, 100L, UNKNOWN_CURRENCY, "tx:unknown", null, REASON));
@@ -126,7 +125,7 @@ public abstract class EconomyServiceContract {
     @Test
     @DisplayName("перевод двигает деньги у обеих сторон")
     void aTransferMovesMoneyBothWays() {
-        assumeSupported(EconomyRole.TRANSFER);
+        assumeSupported(EconomyCapabilities.TRANSFER);
         give(ALICE, 1000L);
         long from = service().balance(ALICE, currency());
         long to = service().balance(BOB, currency());
@@ -142,7 +141,7 @@ public abstract class EconomyServiceContract {
     @Test
     @DisplayName("перевод больше остатка отклонён и денег не двигает")
     void aTransferAboveTheBalanceIsRefused() {
-        assumeSupported(EconomyRole.TRANSFER);
+        assumeSupported(EconomyCapabilities.TRANSFER);
         long from = service().balance(ALICE, currency());
         long to = service().balance(BOB, currency());
 
@@ -158,7 +157,7 @@ public abstract class EconomyServiceContract {
     @Test
     @DisplayName("перевод самому себе отклонён")
     void aTransferToSelfIsRefused() {
-        assumeSupported(EconomyRole.TRANSFER);
+        assumeSupported(EconomyCapabilities.TRANSFER);
         give(ALICE, 500L);
 
         TransferResult result = service()
@@ -170,7 +169,7 @@ public abstract class EconomyServiceContract {
     @Test
     @DisplayName("нулевая сумма отклонена")
     void aZeroAmountIsRefused() {
-        assumeSupported(EconomyRole.TRANSFER);
+        assumeSupported(EconomyCapabilities.TRANSFER);
 
         TransferResult result = service()
             .deposit(TransferRequest.deposit(ALICE, 0L, currency(), "tx:zero", null, REASON));
@@ -181,7 +180,7 @@ public abstract class EconomyServiceContract {
     @Test
     @DisplayName("снятие больше остатка отклонено и денег не двигает")
     void aWithdrawAboveTheBalanceIsRefused() {
-        assumeSupported(EconomyRole.TRANSFER);
+        assumeSupported(EconomyCapabilities.TRANSFER);
         long before = service().balance(ALICE, currency());
 
         TransferResult result = service()
@@ -194,7 +193,7 @@ public abstract class EconomyServiceContract {
     @Test
     @DisplayName("установка кладёт ровно указанное")
     void setPutsTheExactAmount() {
-        assumeSupported(EconomyRole.TRANSFER);
+        assumeSupported(EconomyCapabilities.TRANSFER);
 
         TransferResult result = service().set(TransferRequest.set(BOB, 777L, currency(), "tx:set", null, REASON));
 
@@ -205,7 +204,7 @@ public abstract class EconomyServiceContract {
     @Test
     @DisplayName("повтор операции с тем же идентификатором двигает деньги один раз")
     void aRepeatMovesMoneyOnce() {
-        assumeSupported(EconomyRole.HISTORY);
+        assumeSupported(EconomyCapabilities.HISTORY);
         give(ALICE, 1000L);
         long from = service().balance(ALICE, currency());
 
@@ -224,7 +223,7 @@ public abstract class EconomyServiceContract {
     @Test
     @DisplayName("проведённая операция попадает в историю игрока")
     void theOperationIsKeptInHistory() {
-        assumeSupported(EconomyRole.HISTORY);
+        assumeSupported(EconomyCapabilities.HISTORY);
         give(ALICE, 1000L);
         service().transfer(TransferRequest.transfer(ALICE, BOB, 150L, currency(), "tx:history", ALICE, REASON));
 
@@ -240,7 +239,7 @@ public abstract class EconomyServiceContract {
     @Test
     @DisplayName("топ идёт по убыванию баланса")
     void theTopGoesDown() {
-        assumeSupported(EconomyRole.TOP);
+        assumeSupported(EconomyCapabilities.TOP);
         service().set(TransferRequest.set(ALICE, 900L, currency(), "tx:top-a", null, REASON));
         service().set(TransferRequest.set(BOB, 100L, currency(), "tx:top-b", null, REASON));
 
@@ -259,7 +258,7 @@ public abstract class EconomyServiceContract {
     @Test
     @DisplayName("вторая валюта живёт отдельно от первой")
     void currenciesLiveApart() {
-        assumeSupported(EconomyRole.CURRENCIES);
+        assumeSupported(EconomyCapabilities.CURRENCIES);
         String second = secondCurrency();
         assumeTrue(second != null, "реализация объявила несколько валют, но второй не назвала");
         long before = service().balance(ALICE, currency());
