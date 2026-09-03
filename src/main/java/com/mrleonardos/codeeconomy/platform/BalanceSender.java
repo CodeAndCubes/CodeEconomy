@@ -4,7 +4,7 @@ import java.util.UUID;
 
 import net.minecraft.entity.player.EntityPlayerMP;
 
-import com.mrleonardos.codecore.api.util.Players;
+import com.mrleonardos.codecore.platform.Players;
 import com.mrleonardos.codeeconomy.internal.hud.BalanceHudSink;
 import com.mrleonardos.codeeconomy.network.EconomyPackets;
 import com.mrleonardos.codeeconomy.network.s2c.BalancePacket;

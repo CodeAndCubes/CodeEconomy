@@ -12,8 +12,8 @@ import java.util.function.Supplier;
 
 import net.minecraft.entity.player.EntityPlayerMP;
 
-import com.mrleonardos.codecore.api.util.PlayerNames;
-import com.mrleonardos.codecore.api.util.Players;
+import com.mrleonardos.codecore.platform.PlayerNames;
+import com.mrleonardos.codecore.platform.Players;
 import com.mrleonardos.codeeconomy.api.model.AccountView;
 
 final class NameResolver {
