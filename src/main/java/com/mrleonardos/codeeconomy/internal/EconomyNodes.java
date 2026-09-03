@@ -64,7 +64,7 @@ public final class EconomyNodes {
     /** Стартовый баланс группы в мажорных единицах вместо {@code startBalance} валюты. */
     public static final String META_STARTING = "codeeconomy.starting";
 
-    /** Личный потолок одного перевода вместо {@code limits.maxTransfer}. */
+    /** Личный потолок одного перевода вместо {@code [economy] maxTransfer} главного файла. */
     public static final String META_PAY_LIMIT = "codeeconomy.paylimit";
 
     private EconomyNodes() {}

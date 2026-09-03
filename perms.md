@@ -59,4 +59,4 @@
 | Ключ | Смысл |
 |---|---|
 | `codeeconomy.starting` | стартовый баланс группы в мажорных единицах вместо `startBalance` валюты |
-| `codeeconomy.paylimit` | личный потолок одного перевода вместо `limits.maxTransfer` |
+| `codeeconomy.paylimit` | личный потолок одного перевода вместо `[economy] maxTransfer` главного файла |
