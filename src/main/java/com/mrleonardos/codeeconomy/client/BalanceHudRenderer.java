@@ -67,8 +67,14 @@ public final class BalanceHudRenderer {
         GL11.glPopMatrix();
     }
 
+    /**
+     * Подписью идёт идентификатор валюты, а не её название: {@code displayName} и шаблон показа живут в
+     * файле валют на сервере и в пакет не едут. Пакет ходит на каждое изменение счёта, и возить в нём
+     * строку, которая меняется раз в жизни сервера, дороже, чем показать {@code coin} вместо
+     * {@code Coins}.
+     */
     private String text(ClientSettings options) {
         String amount = Amounts.formatAmount(balance.amount(), balance.decimals());
-        return options.showCurrencyName ? amount + SEPARATOR + balance.currencyId() : amount;
+        return options.showCurrency ? amount + SEPARATOR + balance.currencyId() : amount;
     }
 }

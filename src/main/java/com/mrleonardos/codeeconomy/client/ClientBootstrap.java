@@ -33,7 +33,7 @@ public final class ClientBootstrap implements SideBootstrap {
     private ConfigFile<ClientSettings> settings;
     private ClientBalance balance;
     private BalanceHudRenderer renderer;
-    private boolean asked;
+    private String askedFor;
 
     @Override
     public void install() {
@@ -67,6 +67,10 @@ public final class ClientBootstrap implements SideBootstrap {
      * <p>
      * Забыть баланс при выходе обязательно: на другом сервере счёт другой, а число с прошлого висело бы
      * на экране до первого изменения.
+     *
+     * <p>
+     * Запоминается не сам факт запроса, а валюта, о которой просили. Правка {@code currency} в файле
+     * меняет её, и запрос уходит заново: иначе смена валюты ждала бы перезахода в мир.
      */
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
@@ -74,15 +78,21 @@ public final class ClientBootstrap implements SideBootstrap {
             return;
         }
         if (Minecraft.getMinecraft().thePlayer == null) {
-            asked = false;
+            askedFor = null;
             balance.forget();
             return;
         }
-        if (asked || !settings.get().enabled) {
+        ClientSettings options = settings.get();
+        if (!options.enabled) {
             return;
         }
+        String wanted = options.currency == null ? "" : options.currency.trim();
+        if (wanted.equals(askedFor)) {
+            return;
+        }
+        balance.forget();
         EconomyPackets.channel()
-            .toServer(new BalanceRequestPacket(settings.get().currency));
-        asked = true;
+            .toServer(new BalanceRequestPacket(wanted));
+        askedFor = wanted;
     }
 }

@@ -25,8 +25,8 @@ public final class ClientSettings {
     @Comment("Масштаб надписи. Ниже 0.5 и выше 2.0 не уйдёт.")
     public float scale = 1F;
 
-    @Comment("Подписывать ли сумму названием валюты.")
-    public boolean showCurrencyName = true;
+    @Comment("Подписывать ли сумму идентификатором валюты, тем самым coin или credit.")
+    public boolean showCurrency = true;
 
     @Comment("Какая валюта показывается. Пусто означает валюту сервера по умолчанию.")
     public String currency = "";

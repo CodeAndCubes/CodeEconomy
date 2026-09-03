@@ -49,6 +49,21 @@ class ClientSettingsTest {
         assertTrue(
             text.contains("# Какая валюта показывается. Пусто означает валюту сервера по умолчанию."),
             "смысл пустого значения объясняется в файле");
+        assertTrue(
+            text.contains("# Подписывать ли сумму идентификатором валюты, тем самым coin или credit."),
+            "подписью идёт идентификатор, а не displayName: он на клиент не едет вовсе");
+    }
+
+    @Test
+    void theScaleIsWrittenTheWayPeopleWriteIt() {
+        ConfigFile<ClientSettings> file = TestConfigs.of(root)
+            .open(spec());
+        file.save();
+
+        assertEquals(
+            "1.0",
+            valueOf(TestConfigs.read(file.path()), "scale"),
+            "долю, которую человек правит руками, нельзя писать двоичным хвостом");
     }
 
     @Test
@@ -93,7 +108,26 @@ class ClientSettingsTest {
         assertTrue(settings.enabled, "заводской показ включён: ради него ставят клиентскую часть");
         assertEquals(HudCorner.TOP_RIGHT, settings.corner());
         assertEquals("", settings.currency, "пусто означает валюту сервера, а не отсутствие показа");
+        assertTrue(settings.showCurrency, "без подписи непонятно, в чём сумма, когда валют несколько");
         assertTrue(settings.hideWithGui, "поверх открытого сундука надпись мешала бы");
+    }
+
+    /**
+     * Значение ключа целиком.
+     *
+     * <p>
+     * Через {@code contains} число проверять нельзя: строка {@code 1.0000000149011612} тоже начинается
+     * с {@code 1.0}, и проверка прошла бы на ровно том браке, который ищет.
+     */
+    private static String valueOf(String text, String key) {
+        for (String line : text.split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith(key + " = ")) {
+                return trimmed.substring(key.length() + 3)
+                    .trim();
+            }
+        }
+        throw new AssertionError("Ключа " + key + " в файле нет");
     }
 
     private static ConfigSpec<ClientSettings> spec() {

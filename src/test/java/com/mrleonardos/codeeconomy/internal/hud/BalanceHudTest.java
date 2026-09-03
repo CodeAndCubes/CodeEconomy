@@ -7,7 +7,10 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -18,9 +21,11 @@ import com.mrleonardos.codeeconomy.api.CurrencyIds;
 import com.mrleonardos.codeeconomy.api.model.ChangeCause;
 import com.mrleonardos.codeeconomy.api.model.TransferRequest;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
+import com.mrleonardos.codeeconomy.internal.EconomyNodes;
 import com.mrleonardos.codeeconomy.internal.TestConfigs;
 import com.mrleonardos.codeeconomy.internal.event.EventDispatcher;
 import com.mrleonardos.codeeconomy.internal.service.LedgerService;
+import com.mrleonardos.codeeconomy.internal.service.PlayerLookup;
 import com.mrleonardos.codeeconomy.internal.store.JsonEconomyStore;
 
 /**
@@ -41,15 +46,20 @@ class BalanceHudTest {
     Path root;
 
     private final RecordingSink sent = new RecordingSink();
+    private final Set<UUID> withBalanceNode = new HashSet<>();
 
     private LedgerService service;
     private BalanceHud hud;
 
     @BeforeEach
     void setUp() {
+        withBalanceNode.add(EconomyFixtures.ALICE);
+        withBalanceNode.add(EconomyFixtures.BOB);
+
         EconomyFixtures.Configs config = EconomyFixtures.configs();
         config.provider = "builtin-under-test";
         EventDispatcher events = new EventDispatcher(EconomyFixtures.LOG);
+        PlayerLookup lookup = lookup();
         service = LedgerService.create(
             config.build(),
             Arrays.asList(EconomyFixtures.coin(), EconomyFixtures.credit()),
@@ -59,11 +69,59 @@ class BalanceHudTest {
             () -> true,
             () -> 0L,
             () -> 1000L,
-            EconomyFixtures.lookup(),
+            lookup,
             events,
             EconomyFixtures.LOG);
-        hud = new BalanceHud(service, sent);
+        hud = new BalanceHud(service, lookup, sent, EconomyFixtures.LOG);
         events.register(0, hud);
+    }
+
+    @Test
+    void aPlayerWithoutTheNodeSeesNothing() {
+        withBalanceNode.remove(EconomyFixtures.ALICE);
+
+        hud.watch(EconomyFixtures.ALICE, COIN);
+
+        assertTrue(
+            sent.lines.isEmpty(),
+            "показ отвечает на тот же вопрос, что /balance, и без codeeconomy.balance молчит так же");
+    }
+
+    @Test
+    void takingTheNodeAwayStopsTheUpdates() {
+        watching(EconomyFixtures.ALICE, COIN);
+        withBalanceNode.remove(EconomyFixtures.ALICE);
+
+        deposit(EconomyFixtures.ALICE, 500L, COIN, "tx1");
+        service.tick();
+
+        assertTrue(sent.lines.isEmpty(), "снятая нода гасит показ без перезахода");
+    }
+
+    @Test
+    void givingTheNodeBackShowsTheCurrentNumber() {
+        watching(EconomyFixtures.ALICE, COIN);
+        withBalanceNode.remove(EconomyFixtures.ALICE);
+        deposit(EconomyFixtures.ALICE, 500L, COIN, "tx1");
+        service.tick();
+        withBalanceNode.add(EconomyFixtures.ALICE);
+
+        deposit(EconomyFixtures.ALICE, 300L, COIN, "tx2");
+        service.tick();
+
+        assertEquals(
+            Collections.singletonList(line(EconomyFixtures.ALICE, COIN, COIN_START + 800L, 2)),
+            sent.lines,
+            "отказ по праву не запоминается как отправленная сумма, иначе экран остался бы с прежним числом");
+    }
+
+    @Test
+    void aFailingPermissionServiceLeavesTheDisplayOff() {
+        BalanceHud broken = new BalanceHud(service, brokenLookup(), sent, EconomyFixtures.LOG);
+
+        broken.watch(EconomyFixtures.ALICE, COIN);
+
+        assertTrue(sent.lines.isEmpty(), "право не спросить, значит показывать нельзя");
     }
 
     @Test
@@ -186,6 +244,49 @@ class BalanceHudTest {
 
     private static String line(UUID player, String currencyId, long amount, int decimals) {
         return player + " " + currencyId + " " + amount + " " + decimals;
+    }
+
+    /** Ники и мету отдаёт общая заготовка, ноду показа тест раздаёт сам. */
+    private PlayerLookup lookup() {
+        PlayerLookup names = EconomyFixtures.lookup();
+        return new PlayerLookup() {
+
+            @Override
+            public String name(UUID player) {
+                return names.name(player);
+            }
+
+            @Override
+            public boolean has(UUID player, String node) {
+                return EconomyNodes.BALANCE.equals(node) && withBalanceNode.contains(player);
+            }
+
+            @Override
+            public Optional<String> meta(UUID player, String key) {
+                return names.meta(player, key);
+            }
+        };
+    }
+
+    /** Ядро прав не поднялось: любой вопрос о праве кончается исключением. */
+    private static PlayerLookup brokenLookup() {
+        return new PlayerLookup() {
+
+            @Override
+            public String name(UUID player) {
+                return null;
+            }
+
+            @Override
+            public boolean has(UUID player, String node) {
+                throw new IllegalStateException("PermissionService is not registered yet");
+            }
+
+            @Override
+            public Optional<String> meta(UUID player, String key) {
+                return Optional.empty();
+            }
+        };
     }
 
     /** Сток вместо сети: видно ровно то, что ушло бы игроку. */

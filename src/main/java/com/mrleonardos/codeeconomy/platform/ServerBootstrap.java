@@ -35,6 +35,7 @@ public final class ServerBootstrap implements ServerInstaller {
 
     private final MainThread mainThread = new MainThread();
     private final ServerClock clock = new ServerClock();
+    private final CorePlayerLookup lookup = new CorePlayerLookup();
 
     private EventDispatcher events;
     private EconomyBootstrap bootstrap;
@@ -53,7 +54,7 @@ public final class ServerBootstrap implements ServerInstaller {
             mainThread,
             clock,
             System::currentTimeMillis,
-            new CorePlayerLookup(),
+            lookup,
             events,
             CodeEconomyMod.LOG);
         bootstrap.declare(CodeApi.adapters());
@@ -105,7 +106,7 @@ public final class ServerBootstrap implements ServerInstaller {
             bootstrap.pageSize());
         commands.register(CodeApi.commands());
 
-        BalanceHud hud = new BalanceHud(service, new BalanceSender());
+        BalanceHud hud = new BalanceHud(service, lookup, new BalanceSender(), CodeEconomyMod.LOG);
         events.register(HUD_PRIORITY, hud);
         EconomyBridge.server(new BalanceRequests(hud));
 
