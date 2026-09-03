@@ -241,11 +241,11 @@ final class ForgeEssentialsEconomy implements EconomyService {
         if (request.kind() != TransactionRecord.Kind.TRANSFER) {
             return null;
         }
-        EconomySection limits = section.get();
-        if (request.amount() < limits.minTransfer) {
+        EconomySection economy = section.get();
+        if (request.amount() < economy.minTransfer) {
             return ResultCode.BAD_AMOUNT;
         }
-        return request.amount() > limits.maxTransfer ? ResultCode.ABOVE_CEILING : null;
+        return request.amount() > economy.maxTransfer ? ResultCode.ABOVE_CEILING : null;
     }
 
     private Object walletOf(UUID player, String currencyId) {

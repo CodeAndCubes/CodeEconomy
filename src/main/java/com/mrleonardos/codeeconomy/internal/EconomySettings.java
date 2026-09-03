@@ -79,7 +79,7 @@ public final class EconomySettings {
         return Math.max(0, history.maxAgeHours) * 3600L * 1000L;
     }
 
-    @Comment("История операций, которую мод держит в памяти для /balance history и повторов.")
+    @Comment("История операций, которую мод держит в памяти для /history, /eco history и повторов.")
     public static final class History {
 
         @Comment("Сколько записей держать. Ниже этого числа старые записи выбрасываются.")
