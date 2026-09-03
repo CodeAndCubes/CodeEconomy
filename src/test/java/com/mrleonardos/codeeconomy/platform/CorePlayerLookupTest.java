@@ -47,9 +47,14 @@ class CorePlayerLookupTest {
             lookup.meta(STEVE, EconomyNodes.META_PAY_LIMIT)
                 .isPresent(),
             "умения нет, значит потолок из меты не читается вовсе");
+        assertFalse(
+            lookup.meta(STEVE, EconomyNodes.META_STARTING)
+                .isPresent(),
+            "стартовый баланс группы держится на том же умении");
         assertTrue(
             log.anyWarnContains(EconomyNodes.META_PAY_LIMIT),
             "выключенный потолок обязан быть назван в логе одной строкой");
+        assertTrue(log.anyWarnContains(EconomyNodes.META_STARTING), "второй ключ меты назван той же строкой");
     }
 
     @Test

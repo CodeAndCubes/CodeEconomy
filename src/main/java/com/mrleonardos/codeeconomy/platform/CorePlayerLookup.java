@@ -30,18 +30,20 @@ final class CorePlayerLookup implements PlayerLookup {
      * конце постинициализации ядра и дальше не меняются.
      *
      * <p>
-     * Умения нет, значит личный потолок перевода не читается вовсе. Иначе пустой ответ значил бы и
-     * «значение не задано», и «спросить не у кого», а различить это спрашивающему нечем: потолок из меты
-     * молча стал бы заводским.
+     * Умения нет, значит оба ключа меты не читаются вовсе. Иначе пустой ответ значил бы и «значение не
+     * задано», и «спросить не у кого», а различить это спрашивающему нечем: потолок перевода и стартовый
+     * баланс группы молча стали бы заводскими.
      */
     void checkMeta(AdapterRegistry adapters, Logger log) {
         metaWorks = !adapters.missing(ConfigRoles.PERMISSIONS)
             .contains(PermissionCapabilities.META);
         if (!metaWorks) {
             log.warn(
-                "Owner of role permissions carries no meta, so personal ceiling {} is not read at all: "
-                    + "transfers are bounded by [economy] minTransfer and maxTransfer",
-                EconomyNodes.META_PAY_LIMIT);
+                "Owner of role permissions carries no meta, so {} and {} are not read at all: "
+                    + "one transfer is bounded by [economy] minTransfer and maxTransfer, a new account "
+                    + "starts with startBalance of its currency",
+                EconomyNodes.META_PAY_LIMIT,
+                EconomyNodes.META_STARTING);
         }
     }
 
