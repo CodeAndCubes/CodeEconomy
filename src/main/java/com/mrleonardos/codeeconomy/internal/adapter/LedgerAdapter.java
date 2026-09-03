@@ -10,8 +10,8 @@ import com.mrleonardos.codecore.api.adapter.RoleCapability;
 import com.mrleonardos.codecore.api.adapter.RoleOwnerKind;
 import com.mrleonardos.codecore.api.adapter.RoleServices;
 import com.mrleonardos.codecore.api.config.ConfigRoles;
+import com.mrleonardos.codeeconomy.EconomyConstants;
 import com.mrleonardos.codeeconomy.api.EconomyService;
-import com.mrleonardos.codeeconomy.internal.EconomyConstants;
 import com.mrleonardos.codeeconomy.internal.EconomyRole;
 import com.mrleonardos.codeeconomy.internal.service.LedgerService;
 
@@ -24,9 +24,6 @@ import com.mrleonardos.codeeconomy.internal.service.LedgerService;
  * экономикой значит запутывать админа.
  */
 public final class LedgerAdapter implements RoleAdapter {
-
-    /** Имя, которое админ пишет в {@code [owners] economy}. */
-    public static final String NAME = EconomyConstants.OWNER;
 
     private final Supplier<LedgerService> factory;
 
@@ -41,9 +38,10 @@ public final class LedgerAdapter implements RoleAdapter {
         return ConfigRoles.ECONOMY;
     }
 
+    /** Имя, которое админ пишет в {@code [owners] economy}. */
     @Override
     public String name() {
-        return NAME;
+        return EconomyConstants.OWNER;
     }
 
     @Override

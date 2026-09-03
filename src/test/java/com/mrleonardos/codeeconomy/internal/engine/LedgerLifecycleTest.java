@@ -13,12 +13,12 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.mrleonardos.codeeconomy.EconomyConstants;
 import com.mrleonardos.codeeconomy.api.CurrencyIds;
 import com.mrleonardos.codeeconomy.api.model.ChangeCause;
 import com.mrleonardos.codeeconomy.api.model.ResultCode;
 import com.mrleonardos.codeeconomy.api.store.CheckpointResult;
 import com.mrleonardos.codeeconomy.internal.EconomyConfig;
-import com.mrleonardos.codeeconomy.internal.EconomyConstants;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
 import com.mrleonardos.codeeconomy.internal.TestConfigs;
 import com.mrleonardos.codeeconomy.internal.store.JsonEconomyStore;

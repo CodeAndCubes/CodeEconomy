@@ -14,9 +14,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.mrleonardos.codeeconomy.EconomyConstants;
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
 import com.mrleonardos.codeeconomy.api.model.ResultCode;
-import com.mrleonardos.codeeconomy.internal.EconomyConstants;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
 import com.mrleonardos.codeeconomy.internal.TestConfigs;
 import com.mrleonardos.codeeconomy.internal.command.EconomyMessages;

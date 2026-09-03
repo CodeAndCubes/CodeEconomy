@@ -7,6 +7,7 @@ import com.mrleonardos.codecore.api.config.ConfigRoles;
 import com.mrleonardos.codecore.api.config.ConfigScope;
 import com.mrleonardos.codecore.api.config.ConfigSpec;
 import com.mrleonardos.codecore.api.config.Migration;
+import com.mrleonardos.codeeconomy.EconomyConstants;
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
 import com.mrleonardos.codeeconomy.internal.store.SchemaMigrations;
 

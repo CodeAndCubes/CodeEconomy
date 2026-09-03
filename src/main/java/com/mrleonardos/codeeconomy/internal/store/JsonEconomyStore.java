@@ -19,6 +19,7 @@ import com.mrleonardos.codecore.api.config.ConfigRoles;
 import com.mrleonardos.codecore.api.config.ConfigScope;
 import com.mrleonardos.codecore.api.config.ConfigSpec;
 import com.mrleonardos.codecore.api.config.Migration;
+import com.mrleonardos.codeeconomy.EconomyConstants;
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
 import com.mrleonardos.codeeconomy.api.model.AccountView;
 import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
@@ -30,7 +31,6 @@ import com.mrleonardos.codeeconomy.api.store.StoreMaintenance;
 import com.mrleonardos.codeeconomy.api.store.StoreResult;
 import com.mrleonardos.codeeconomy.api.store.StoreSnapshot;
 import com.mrleonardos.codeeconomy.api.store.StoreVerification;
-import com.mrleonardos.codeeconomy.internal.EconomyConstants;
 
 /**
  * Встроенное хранилище: чекпоинт {@code economy-accounts.json} через ConfigService ядра и append-only
@@ -91,10 +91,7 @@ public final class JsonEconomyStore implements EconomyStore, StoreMaintenance {
     }
 
     public static JsonObject defaults() {
-        JsonObject data = new JsonObject();
-        data.addProperty(SnapshotWriter.CHECKPOINT_FIELD, Long.valueOf(0L));
-        data.add(SnapshotWriter.ACCOUNTS_FIELD, new JsonObject());
-        return data;
+        return SnapshotWriter.empty();
     }
 
     public static Path journalPath(ConfigFile<JsonObject> checkpointFile) {

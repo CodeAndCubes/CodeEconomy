@@ -1,4 +1,4 @@
-package com.mrleonardos.codeeconomy.internal;
+package com.mrleonardos.codeeconomy;
 
 /** Имена, из которых ядро складывает пути файлов мода. */
 public final class EconomyConstants {

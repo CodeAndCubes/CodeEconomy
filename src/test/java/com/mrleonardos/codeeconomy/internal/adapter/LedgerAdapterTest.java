@@ -14,8 +14,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.mrleonardos.codecore.api.adapter.RoleOwnerKind;
 import com.mrleonardos.codecore.api.config.ConfigRoles;
+import com.mrleonardos.codeeconomy.EconomyConstants;
 import com.mrleonardos.codeeconomy.api.EconomyService;
-import com.mrleonardos.codeeconomy.internal.EconomyConstants;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
 import com.mrleonardos.codeeconomy.internal.EconomyRole;
 import com.mrleonardos.codeeconomy.internal.TestConfigs;

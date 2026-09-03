@@ -30,18 +30,18 @@ import com.mrleonardos.codeeconomy.api.model.AccountView;
  */
 public final class SnapshotWriter {
 
-    public static final String ACCOUNTS_FIELD = "accounts";
-    public static final String CHECKPOINT_FIELD = "checkpointSeq";
-    public static final String QUARANTINE_FIELD = "quarantine";
+    private static final String ACCOUNTS_FIELD = "accounts";
+    private static final String CHECKPOINT_FIELD = "checkpointSeq";
+    private static final String QUARANTINE_FIELD = "quarantine";
 
-    public static final String UUID_FIELD = "uuid";
-    public static final String NAME_FIELD = "name";
-    public static final String BALANCES_FIELD = "balances";
-    public static final String FROZEN_FIELD = "frozen";
-    public static final String CREATED_AT_FIELD = "createdAt";
+    private static final String UUID_FIELD = "uuid";
+    private static final String NAME_FIELD = "name";
+    private static final String BALANCES_FIELD = "balances";
+    private static final String FROZEN_FIELD = "frozen";
+    private static final String CREATED_AT_FIELD = "createdAt";
 
-    public static final String QUARANTINE_AT_FIELD = "at";
-    public static final String QUARANTINE_REASON_FIELD = "reason";
+    private static final String QUARANTINE_AT_FIELD = "at";
+    private static final String QUARANTINE_REASON_FIELD = "reason";
 
     private final ConfigFile<JsonObject> file;
     private final EconomyLimits limits;
@@ -54,6 +54,21 @@ public final class SnapshotWriter {
         this.file = file;
         this.limits = limits;
         this.log = log;
+    }
+
+    /**
+     * Пустой чекпоинт первого запуска: счетов нет, граница на нуле.
+     *
+     * <p>
+     * Собирается здесь, а не у хранилища: имена ключей json знает только тот, кто их читает и пишет.
+     * Наружу они не выходят ещё и потому, что вырезанная константа со значением вроде {@code uuid}
+     * считалась бы утёкшей в клиентский jar, где такая же строка стоит в {@code api}.
+     */
+    public static JsonObject empty() {
+        JsonObject data = new JsonObject();
+        data.addProperty(CHECKPOINT_FIELD, Long.valueOf(0L));
+        data.add(ACCOUNTS_FIELD, new JsonObject());
+        return data;
     }
 
     public Checkpoint read() {

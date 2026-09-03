@@ -14,6 +14,7 @@ import com.mrleonardos.codecore.api.config.ConfigRoles;
 import com.mrleonardos.codecore.api.config.ConfigService;
 import com.mrleonardos.codecore.api.config.SectionSpec;
 import com.mrleonardos.codecore.api.util.Scheduler;
+import com.mrleonardos.codeeconomy.EconomyConstants;
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
 import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
 import com.mrleonardos.codeeconomy.internal.adapter.ForgeEssentialsAdapter;
