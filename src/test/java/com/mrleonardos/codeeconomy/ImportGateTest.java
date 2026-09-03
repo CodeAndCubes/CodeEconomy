@@ -33,8 +33,8 @@ class ImportGateTest {
     private static final String[] SERVER_ONLY = { INTERNAL, PLATFORM };
 
     /**
-     * Шире заводского списка гейта: тот знает только про игру, а из api торчали ещё netty вместе с
-     * пакетами и слой платформы ядра, который в api-джаре ядра тоже не лежит.
+     * Шире заводского списка гейта: тот знает только про игру, а из мода торчала ещё netty вместе с
+     * пакетами и слой платформы ядра, которого в api-джаре ядра тоже нет.
      */
     private static final String[] FOREIGN = { "net/minecraft", "net/minecraftforge", "cpw/mods", "io/netty",
         "org/lwjgl", "com/mojang", "com/mrleonardos/codecore/platform" };
@@ -55,7 +55,7 @@ class ImportGateTest {
 
         assertTrue(
             violations.isEmpty(),
-            () -> "пакеты и стоки описывают провод, а не игру: ссылка на игрока едет ссылкой, байты "
+            () -> "пакеты и стоки описывают провод, а не игру: игрок едет ссылкой PlayerRef, байты "
                 + "буфером ядра. Чужие ссылки:\n"
                 + String.join("\n", violations));
     }
