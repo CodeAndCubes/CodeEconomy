@@ -6,9 +6,7 @@ import java.util.function.Supplier;
 
 import com.mrleonardos.codecore.api.actor.PlayerRef;
 import com.mrleonardos.codecore.api.command.CommandContext;
-import com.mrleonardos.codecore.api.command.CommandSender;
 import com.mrleonardos.codecore.api.service.PermissionService;
-import com.mrleonardos.codecore.platform.Senders;
 import com.mrleonardos.codeeconomy.internal.Lazy;
 import com.mrleonardos.codeeconomy.internal.command.EconomySubjects;
 
@@ -33,7 +31,8 @@ final class SenderSubjects implements EconomySubjects {
 
     @Override
     public Optional<UUID> subjectOf(CommandContext context) {
-        return senderOf(context).player()
+        return context.caller()
+            .player()
             .map(PlayerRef::id);
     }
 
@@ -45,10 +44,6 @@ final class SenderSubjects implements EconomySubjects {
     @Override
     public boolean senderHas(CommandContext context, String node) {
         return permissions.get()
-            .has(senderOf(context), node);
-    }
-
-    private static CommandSender senderOf(CommandContext context) {
-        return Senders.of(context.sender());
+            .has(context.caller(), node);
     }
 }

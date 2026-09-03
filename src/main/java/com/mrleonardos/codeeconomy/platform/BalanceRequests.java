@@ -1,7 +1,6 @@
 package com.mrleonardos.codeeconomy.platform;
 
-import net.minecraft.entity.player.EntityPlayerMP;
-
+import com.mrleonardos.codecore.api.actor.PlayerRef;
 import com.mrleonardos.codeeconomy.common.ServerSink;
 import com.mrleonardos.codeeconomy.internal.hud.BalanceHud;
 
@@ -21,7 +20,7 @@ final class BalanceRequests implements ServerSink {
     }
 
     @Override
-    public void watch(EntityPlayerMP player, String currencyId) {
-        hud.watch(player.getUniqueID(), currencyId);
+    public void watch(PlayerRef player, String currencyId) {
+        hud.watch(player.id(), currencyId);
     }
 }

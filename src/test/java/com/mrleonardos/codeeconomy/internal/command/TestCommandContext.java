@@ -5,16 +5,22 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import net.minecraft.command.ICommandSender;
 import net.minecraft.entity.player.EntityPlayerMP;
 
+import com.mrleonardos.codecore.api.actor.PlayerRef;
 import com.mrleonardos.codecore.api.command.CommandContext;
+import com.mrleonardos.codecore.api.command.CommandSender;
+import com.mrleonardos.codecore.api.command.SenderKind;
+import com.mrleonardos.codecore.api.command.SenderPosition;
 
 final class TestCommandContext implements CommandContext {
 
     private final Map<String, Object> values = new LinkedHashMap<>();
     private final List<Sent> replies = new ArrayList<>();
+    private final CommandSender console = new ConsoleSender();
 
     TestCommandContext set(String name, Object value) {
         values.put(name, value);
@@ -23,6 +29,11 @@ final class TestCommandContext implements CommandContext {
 
     void put(String name, Object value) {
         values.put(name, value);
+    }
+
+    @Override
+    public CommandSender caller() {
+        return console;
     }
 
     @Override
@@ -71,6 +82,40 @@ final class TestCommandContext implements CommandContext {
 
     List<Sent> sent() {
         return replies;
+    }
+
+    /** Отправитель без игрока: команды из тестов приходят от консоли, как из настоящего терминала. */
+    private final class ConsoleSender implements CommandSender {
+
+        @Override
+        public SenderKind kind() {
+            return SenderKind.CONSOLE;
+        }
+
+        @Override
+        public Optional<PlayerRef> player() {
+            return Optional.empty();
+        }
+
+        @Override
+        public String name() {
+            return "console";
+        }
+
+        @Override
+        public Optional<SenderPosition> position() {
+            return Optional.empty();
+        }
+
+        @Override
+        public void reply(String translationKey, Object... arguments) {
+            TestCommandContext.this.reply(translationKey, arguments);
+        }
+
+        @Override
+        public void replyError(String translationKey, Object... arguments) {
+            TestCommandContext.this.replyError(translationKey, arguments);
+        }
     }
 
     static final class Sent {

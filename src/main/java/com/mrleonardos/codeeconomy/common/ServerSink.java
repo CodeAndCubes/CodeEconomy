@@ -1,6 +1,6 @@
 package com.mrleonardos.codeeconomy.common;
 
-import net.minecraft.entity.player.EntityPlayerMP;
+import com.mrleonardos.codecore.api.actor.PlayerRef;
 
 /**
  * То, что приходящие пакеты делают на сервере.
@@ -16,5 +16,5 @@ public interface ServerSink {
      *
      * @param currencyId идентификатор валюты, пустая строка означает валюту сервера по умолчанию
      */
-    void watch(EntityPlayerMP player, String currencyId);
+    void watch(PlayerRef player, String currencyId);
 }

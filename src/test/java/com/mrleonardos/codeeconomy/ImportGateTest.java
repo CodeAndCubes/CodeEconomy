@@ -50,6 +50,17 @@ class ImportGateTest {
     }
 
     @Test
+    void theWireHoldsNoPlatformTypesEither() throws IOException {
+        List<String> violations = gate(FOREIGN).violations(COMMON, NETWORK);
+
+        assertTrue(
+            violations.isEmpty(),
+            () -> "пакеты и стоки описывают провод, а не игру: ссылка на игрока едет ссылкой, байты "
+                + "буфером ядра. Чужие ссылки:\n"
+                + String.join("\n", violations));
+    }
+
+    @Test
     void commonCodeDoesNotReachIntoTheServerHalf() throws IOException {
         List<String> violations = gate(SERVER_ONLY).violations(COMMON, NETWORK);
 

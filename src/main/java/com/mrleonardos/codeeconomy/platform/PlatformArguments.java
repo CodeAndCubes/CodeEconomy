@@ -5,10 +5,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-import net.minecraft.command.CommandException;
-import net.minecraft.command.ICommandSender;
-
 import com.mrleonardos.codecore.api.command.ArgumentType;
+import com.mrleonardos.codecore.api.command.CommandInputException;
+import com.mrleonardos.codecore.api.command.CommandSender;
 import com.mrleonardos.codeeconomy.api.CurrencyIds;
 import com.mrleonardos.codeeconomy.api.EconomyService;
 import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
@@ -36,13 +35,13 @@ final class PlatformArguments implements EconomyArguments {
                 UUID player = names.id(raw)
                     .orElse(null);
                 if (player == null) {
-                    throw new CommandException(EconomyMessages.FAILURE_UNKNOWN_PLAYER, raw);
+                    throw new CommandInputException(EconomyMessages.FAILURE_UNKNOWN_PLAYER, raw);
                 }
                 return player;
             }
 
             @Override
-            public List<String> suggestions(ICommandSender sender, String partial) {
+            public List<String> suggestions(CommandSender sender, String partial) {
                 return names.suggest(partial, SUGGESTION_LIMIT);
             }
         };
@@ -58,7 +57,7 @@ final class PlatformArguments implements EconomyArguments {
             }
 
             @Override
-            public List<String> suggestions(ICommandSender sender, String partial) {
+            public List<String> suggestions(CommandSender sender, String partial) {
                 return startingWith(visibleCurrencies(), partial);
             }
         };

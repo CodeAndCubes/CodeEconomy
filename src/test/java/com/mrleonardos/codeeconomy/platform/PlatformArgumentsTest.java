@@ -13,10 +13,10 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import net.minecraft.command.CommandException;
-
 import org.junit.jupiter.api.Test;
 
+import com.mrleonardos.codecore.api.command.CommandInputException;
+import com.mrleonardos.codecore.api.command.CommandSender;
 import com.mrleonardos.codeeconomy.api.CurrencyIds;
 import com.mrleonardos.codeeconomy.api.EconomyService;
 import com.mrleonardos.codeeconomy.api.model.AccountView;
@@ -48,11 +48,12 @@ class PlatformArgumentsTest {
                 .parse("STEVE"),
             "ник разбирается без учёта регистра");
 
-        CommandException unknown = assertThrows(
-            CommandException.class,
+        CommandInputException unknown = assertThrows(
+            CommandInputException.class,
             () -> arguments.player()
                 .parse("Alex"));
-        assertEquals(EconomyMessages.FAILURE_UNKNOWN_PLAYER, unknown.getMessage());
+        assertEquals(EconomyMessages.FAILURE_UNKNOWN_PLAYER, unknown.translationKey());
+        assertEquals("Alex", unknown.arguments()[0], "в сообщение подставляется введённый ник");
     }
 
     @Test
@@ -98,12 +99,12 @@ class PlatformArgumentsTest {
                 .parse("COIN"));
 
         List<String> suggestions = arguments.currency()
-            .suggestions(null, "g");
+            .suggestions((CommandSender) null, "g");
         assertTrue(suggestions.isEmpty(), "скрытая валюта в подсказки не попадает");
         assertEquals(
             Collections.singletonList("coin"),
             arguments.currency()
-                .suggestions(null, "co"),
+                .suggestions((CommandSender) null, "co"),
             "видимая валюта подсказывается");
     }
 

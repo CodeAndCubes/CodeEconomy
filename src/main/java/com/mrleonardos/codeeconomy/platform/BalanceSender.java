@@ -2,8 +2,8 @@ package com.mrleonardos.codeeconomy.platform;
 
 import java.util.UUID;
 
-import net.minecraft.entity.player.EntityPlayerMP;
-
+import com.mrleonardos.codecore.api.actor.PlayerRef;
+import com.mrleonardos.codecore.platform.PlayerRefs;
 import com.mrleonardos.codecore.platform.Players;
 import com.mrleonardos.codeeconomy.internal.hud.BalanceHudSink;
 import com.mrleonardos.codeeconomy.network.EconomyPackets;
@@ -20,7 +20,7 @@ final class BalanceSender implements BalanceHudSink {
 
     @Override
     public void send(UUID player, String currencyId, long amount, int decimals) {
-        EntityPlayerMP online = Players.online(player);
+        PlayerRef online = PlayerRefs.of(Players.online(player));
         if (online == null) {
             return;
         }

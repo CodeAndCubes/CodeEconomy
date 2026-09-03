@@ -1,14 +1,12 @@
 package com.mrleonardos.codeeconomy.network.c2s;
 
-import net.minecraft.entity.player.EntityPlayerMP;
-
+import com.mrleonardos.codecore.api.actor.PlayerRef;
+import com.mrleonardos.codecore.api.net.CodeBuffer;
 import com.mrleonardos.codecore.api.net.Codec;
 import com.mrleonardos.codecore.api.net.Packet;
 import com.mrleonardos.codecore.api.net.PacketContext;
 import com.mrleonardos.codeeconomy.common.EconomyBridge;
 import com.mrleonardos.codeeconomy.common.ServerSink;
-
-import io.netty.buffer.ByteBuf;
 
 /**
  * Клиент просит показывать ему баланс и называет валюту.
@@ -37,18 +35,19 @@ public final class BalanceRequestPacket extends Packet {
     }
 
     @Override
-    public void write(ByteBuf buffer) {
+    public void write(CodeBuffer buffer) {
         Codec.writeString(buffer, currencyId);
     }
 
     @Override
-    public void read(ByteBuf buffer) {
+    public void read(CodeBuffer buffer) {
         currencyId = Codec.readString(buffer);
     }
 
     @Override
     public void handle(PacketContext context) {
-        EntityPlayerMP sender = context.sender();
+        PlayerRef sender = context.player()
+            .orElse(null);
         ServerSink sink = EconomyBridge.server();
         if (sender != null && sink != null) {
             sink.watch(sender, currencyId);

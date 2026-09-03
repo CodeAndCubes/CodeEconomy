@@ -1,12 +1,11 @@
 package com.mrleonardos.codeeconomy.network.s2c;
 
+import com.mrleonardos.codecore.api.net.CodeBuffer;
 import com.mrleonardos.codecore.api.net.Codec;
 import com.mrleonardos.codecore.api.net.Packet;
 import com.mrleonardos.codecore.api.net.PacketContext;
 import com.mrleonardos.codeeconomy.common.ClientSink;
 import com.mrleonardos.codeeconomy.common.EconomyBridge;
-
-import io.netty.buffer.ByteBuf;
 
 /**
  * Баланс игрока для показа на экране.
@@ -46,14 +45,14 @@ public final class BalancePacket extends Packet {
     }
 
     @Override
-    public void write(ByteBuf buffer) {
+    public void write(CodeBuffer buffer) {
         Codec.writeString(buffer, currencyId);
         buffer.writeLong(amount);
         buffer.writeInt(decimals);
     }
 
     @Override
-    public void read(ByteBuf buffer) {
+    public void read(CodeBuffer buffer) {
         currencyId = Codec.readString(buffer);
         amount = buffer.readLong();
         decimals = buffer.readInt();
