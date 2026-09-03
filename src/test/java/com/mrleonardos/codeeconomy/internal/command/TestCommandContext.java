@@ -7,9 +7,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import net.minecraft.command.ICommandSender;
-import net.minecraft.entity.player.EntityPlayerMP;
-
 import com.mrleonardos.codecore.api.actor.PlayerRef;
 import com.mrleonardos.codecore.api.command.CommandContext;
 import com.mrleonardos.codecore.api.command.CommandSender;
@@ -34,16 +31,6 @@ final class TestCommandContext implements CommandContext {
     @Override
     public CommandSender caller() {
         return console;
-    }
-
-    @Override
-    public ICommandSender sender() {
-        return null;
-    }
-
-    @Override
-    public EntityPlayerMP player() {
-        return null;
     }
 
     @Override

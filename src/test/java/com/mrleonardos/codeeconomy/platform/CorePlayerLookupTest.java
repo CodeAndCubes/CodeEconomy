@@ -10,8 +10,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import net.minecraft.command.ICommandSender;
-
 import org.junit.jupiter.api.Test;
 
 import com.mrleonardos.codecore.api.adapter.AdapterRegistry;
@@ -147,11 +145,6 @@ class CorePlayerLookupTest {
 
         @Override
         public boolean has(UUID player, String node) {
-            return false;
-        }
-
-        @Override
-        public boolean has(ICommandSender sender, String node) {
             return false;
         }
 
