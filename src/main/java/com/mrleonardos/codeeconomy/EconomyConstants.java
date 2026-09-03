@@ -5,6 +5,12 @@ public final class EconomyConstants {
 
     public static final String MODID = "codeeconomy";
 
+    /** Имя мода для FML и для логгера. */
+    public static final String MOD_NAME = "CodeEconomy";
+
+    /** Ядро обязано загрузиться раньше: мод сразу спрашивает у него сервисы. */
+    public static final String DEPENDENCIES = "required-after:codecore";
+
     /** Имя владельца в секции {@code [owners]} главного файла. */
     public static final String OWNER = MODID;
 
