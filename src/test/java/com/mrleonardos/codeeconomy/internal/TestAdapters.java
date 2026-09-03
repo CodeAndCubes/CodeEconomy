@@ -60,6 +60,7 @@ public final class TestAdapters implements AdapterRegistry {
 
     @Override
     public String owner(String role) {
+        requireDecided("owner");
         RoleAdapter winner = owners.get(role);
         return winner == null ? null : winner.name();
     }
@@ -78,6 +79,7 @@ public final class TestAdapters implements AdapterRegistry {
 
     @Override
     public Set<RoleCapability> missing(String role) {
+        requireDecided("missing");
         RoleSpec spec = declared.get(role);
         if (spec == null) {
             return Collections.emptySet();
@@ -157,6 +159,17 @@ public final class TestAdapters implements AdapterRegistry {
     private void requireOpen() {
         if (decided) {
             throw new IllegalStateException("Roles are already decided");
+        }
+    }
+
+    /**
+     * Реестр ядра до решения ролей на эти вопросы бросает, а не отвечает: пустой перечень читался бы как
+     * «владелец умеет всё», полный как «не работает ничего». Подставной реестр держит то же правило,
+     * иначе тест зеленел бы на поведении, которого на сервере нет.
+     */
+    private void requireDecided(String question) {
+        if (!decided) {
+            throw new IllegalStateException("Roles are not decided yet, " + question + "() has no honest answer");
         }
     }
 }

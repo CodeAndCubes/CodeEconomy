@@ -56,6 +56,32 @@ class PlatformArgumentsTest {
         assertEquals("Alex", unknown.arguments()[0], "в сообщение подставляется введённый ник");
     }
 
+    /**
+     * Сторож на молчаливую перегрузку.
+     *
+     * <p>
+     * {@code ArgumentType.suggestions} это метод по умолчанию, и подпись, разошедшаяся с той, что зовёт
+     * мост команд, становится перегрузкой, а не переопределением: сборка остаётся зелёной, а подсказки
+     * возвращают пустой список из тела по умолчанию. Проверить наличие {@code @Override} сборкой нельзя,
+     * аннотация не доживает до класса, поэтому проверяется сама поломка.
+     */
+    @Test
+    void theSuggestionsOfThePlayerArgumentActuallyReachTheResolver() {
+        Map<UUID, AccountView> accounts = new LinkedHashMap<>();
+        accounts.put(STEVE, AccountView.of(STEVE, "Steve", Collections.<String, Long>emptyMap(), false, 1L));
+        PlatformArguments arguments = new PlatformArguments(
+            new NameResolver(() -> accounts),
+            economy(Collections.<CurrencyRecord>emptyList()));
+
+        List<String> suggestions = arguments.player()
+            .suggestions((CommandSender) null, "St");
+
+        assertEquals(
+            Collections.singletonList("Steve"),
+            suggestions,
+            "подсказки игрока идут в NameResolver, а не в пустое тело по умолчанию");
+    }
+
     @Test
     void nameResolverAnswersNamesAndSuggestionsFromAccounts() {
         Map<UUID, AccountView> accounts = new LinkedHashMap<>();
@@ -98,9 +124,11 @@ class PlatformArgumentsTest {
             arguments.currency()
                 .parse("COIN"));
 
-        List<String> suggestions = arguments.currency()
-            .suggestions((CommandSender) null, "g");
-        assertTrue(suggestions.isEmpty(), "скрытая валюта в подсказки не попадает");
+        assertTrue(
+            arguments.currency()
+                .suggestions((CommandSender) null, "g")
+                .isEmpty(),
+            "скрытая валюта в подсказки не попадает");
         assertEquals(
             Collections.singletonList("coin"),
             arguments.currency()

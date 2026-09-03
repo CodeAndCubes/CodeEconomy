@@ -51,6 +51,10 @@ class JsonEconomyStoreTest {
         String journal = new String(Files.readAllBytes(journalPath()), StandardCharsets.UTF_8);
         assertTrue(journal.contains("\"kind\":\"TRANSFER\""));
         assertTrue(journal.contains("\"transactionId\":\"tx1\""));
+        assertTrue(
+            journal.contains("\"from\":\"" + ALICE_KEY + "\"") && journal.contains("\"to\":\"" + BOB_KEY + "\""),
+            "участники записаны каноническими 36 знаками UUID: журнал переживает обновление мода, и "
+                + "менять вид этой строки задним числом нельзя");
 
         TransactionRecord decoded = JournalCodec.decode(journal.trim());
         assertNotNull(decoded);

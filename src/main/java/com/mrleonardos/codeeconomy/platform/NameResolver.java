@@ -10,9 +10,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-import net.minecraft.entity.player.EntityPlayerMP;
-
+import com.mrleonardos.codecore.api.actor.PlayerRef;
 import com.mrleonardos.codecore.platform.PlayerNames;
+import com.mrleonardos.codecore.platform.PlayerRefs;
 import com.mrleonardos.codecore.platform.Players;
 import com.mrleonardos.codeeconomy.api.model.AccountView;
 
@@ -37,9 +37,9 @@ final class NameResolver {
     }
 
     Optional<UUID> id(String input) {
-        EntityPlayerMP online = Players.online(input);
+        PlayerRef online = PlayerRefs.of(Players.online(input));
         if (online != null) {
-            return Optional.of(online.getUniqueID());
+            return Optional.of(online.id());
         }
         for (AccountView account : accounts.get()
             .values()) {
