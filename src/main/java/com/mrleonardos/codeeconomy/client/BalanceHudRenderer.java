@@ -25,6 +25,7 @@ public final class BalanceHudRenderer {
     private static final float SHADOW_ALPHA = 0.45F;
     private static final float PANEL_ALPHA = 0.55F;
     private static final float OPAQUE = 1F;
+    private static final float FLAT = 1F;
     private static final String SEPARATOR = " ";
 
     private final Minecraft minecraft;
@@ -59,7 +60,7 @@ public final class BalanceHudRenderer {
         int top = corner.top() ? options.offsetY : areaHeight - options.offsetY - height;
 
         GL11.glPushMatrix();
-        GL11.glScalef(scale, scale, OPAQUE);
+        GL11.glScalef(scale, scale, FLAT);
         Draw.shadow(left, top, left + width, top + height, SHADOW_SPREAD, SHADOW_ALPHA);
         Draw.roundedRect(left, top, left + width, top + height, Theme.CORNER, Theme.SURFACE, PANEL_ALPHA);
         font.drawStringWithShadow(text, left + Theme.PADDING, top + Theme.PADDING, Draw.withAlpha(Theme.TEXT, OPAQUE));
