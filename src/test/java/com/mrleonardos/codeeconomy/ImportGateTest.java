@@ -32,13 +32,21 @@ class ImportGateTest {
 
     private static final String[] SERVER_ONLY = { INTERNAL, PLATFORM };
 
+    /**
+     * Шире заводского списка гейта: тот знает только про игру, а из api торчали ещё netty вместе с
+     * пакетами и слой платформы ядра, который в api-джаре ядра тоже не лежит.
+     */
+    private static final String[] FOREIGN = { "net/minecraft", "net/minecraftforge", "cpw/mods", "io/netty",
+        "org/lwjgl", "com/mojang", "com/mrleonardos/codecore/platform" };
+
     @Test
     void apiAndInternalHoldNoPlatformTypes() throws IOException {
-        List<String> violations = gate().violations(API, INTERNAL);
+        List<String> violations = gate(FOREIGN).violations(API, INTERNAL);
 
         assertTrue(
             violations.isEmpty(),
-            () -> "типы Minecraft и Forge живут вне api и internal, чужие ссылки:\n" + String.join("\n", violations));
+            () -> "типы игры, netty и слой платформы ядра живут только в platform, чужие ссылки:\n"
+                + String.join("\n", violations));
     }
 
     @Test
