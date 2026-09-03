@@ -10,10 +10,12 @@ import com.mrleonardos.codecore.api.service.PermissionService;
 import com.mrleonardos.codeeconomy.CodeEconomyMod;
 import com.mrleonardos.codeeconomy.api.EconomyApi;
 import com.mrleonardos.codeeconomy.api.EconomyService;
+import com.mrleonardos.codeeconomy.common.EconomyBridge;
 import com.mrleonardos.codeeconomy.common.ServerInstaller;
 import com.mrleonardos.codeeconomy.internal.EconomyBootstrap;
 import com.mrleonardos.codeeconomy.internal.command.EconomyCommands;
 import com.mrleonardos.codeeconomy.internal.event.EventDispatcher;
+import com.mrleonardos.codeeconomy.internal.hud.BalanceHud;
 import com.mrleonardos.codeeconomy.internal.service.LedgerService;
 
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -28,15 +30,19 @@ import cpw.mods.fml.common.FMLCommonHandler;
  */
 public final class ServerBootstrap implements ServerInstaller {
 
+    /** Показ баланса только смотрит, поэтому в цепочке слушателей стоит последним. */
+    private static final int HUD_PRIORITY = 1000;
+
     private final MainThread mainThread = new MainThread();
     private final ServerClock clock = new ServerClock();
 
+    private EventDispatcher events;
     private EconomyBootstrap bootstrap;
     private PlatformLifecycle lifecycle;
 
     @Override
     public void init() {
-        EventDispatcher events = new EventDispatcher(CodeEconomyMod.LOG);
+        events = new EventDispatcher(CodeEconomyMod.LOG);
         EconomyApi.install(
             () -> CodeApi.services()
                 .require(EconomyService.class),
@@ -99,7 +105,11 @@ public final class ServerBootstrap implements ServerInstaller {
             bootstrap.pageSize());
         commands.register(CodeApi.commands());
 
-        lifecycle = new PlatformLifecycle(service);
+        BalanceHud hud = new BalanceHud(service, new BalanceSender());
+        events.register(HUD_PRIORITY, hud);
+        EconomyBridge.server(new BalanceRequests(hud));
+
+        lifecycle = new PlatformLifecycle(service, hud);
         FMLCommonHandler.instance()
             .bus()
             .register(

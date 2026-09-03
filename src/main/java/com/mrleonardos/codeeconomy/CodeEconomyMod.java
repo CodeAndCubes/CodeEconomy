@@ -5,6 +5,7 @@ import org.apache.logging.log4j.Logger;
 
 import com.mrleonardos.codeeconomy.common.ServerInstaller;
 import com.mrleonardos.codeeconomy.common.SideParts;
+import com.mrleonardos.codeeconomy.network.EconomyPackets;
 
 import cpw.mods.fml.common.Mod;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
@@ -40,6 +41,7 @@ public final class CodeEconomyMod {
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         LOG.info("CodeEconomy {} is starting up", Tags.VERSION);
+        EconomyPackets.register();
     }
 
     @Mod.EventHandler
