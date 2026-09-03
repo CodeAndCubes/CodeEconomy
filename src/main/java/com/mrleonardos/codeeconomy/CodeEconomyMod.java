@@ -4,10 +4,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import com.mrleonardos.codeeconomy.common.ServerInstaller;
+import com.mrleonardos.codeeconomy.common.SideBootstrap;
 import com.mrleonardos.codeeconomy.common.SideParts;
 import com.mrleonardos.codeeconomy.network.EconomyPackets;
 
 import cpw.mods.fml.common.Mod;
+import cpw.mods.fml.common.SidedProxy;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
@@ -36,6 +38,11 @@ public final class CodeEconomyMod {
 
     public static final Logger LOG = LogManager.getLogger(EconomyConstants.MOD_NAME);
 
+    @SidedProxy(
+        clientSide = "com.mrleonardos.codeeconomy.client.ClientBootstrap",
+        serverSide = "com.mrleonardos.codeeconomy.common.HeadlessBootstrap")
+    public static SideBootstrap side;
+
     private ServerInstaller server;
 
     @Mod.EventHandler
@@ -49,9 +56,10 @@ public final class CodeEconomyMod {
         server = SideParts.serverInstaller();
         if (server == null) {
             LOG.info("Server side is not present in this build, running as a client only");
-            return;
+        } else {
+            server.init();
         }
-        server.init();
+        side.install();
     }
 
     @Mod.EventHandler

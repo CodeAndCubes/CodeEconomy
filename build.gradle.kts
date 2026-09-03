@@ -10,5 +10,5 @@ codeSides {
 	inputJar.set(
 		tasks.named<AbstractArchiveTask>("reobfJar")
 			.flatMap { it.archiveFile })
-	client.set(false)
+	client.set(true)
 }

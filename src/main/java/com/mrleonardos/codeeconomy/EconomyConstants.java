@@ -17,6 +17,9 @@ public final class EconomyConstants {
     /** Валюты: {@code config/code/economy/economy-currencies.toml}. */
     public static final String CURRENCIES_FILE = "currencies";
 
+    /** Предпочтения игрока: {@code config/code/economy/client/economy-client.toml}. */
+    public static final String CLIENT_FILE = "client";
+
     /** Чекпоинт счетов: {@code <мир>/code/economy/economy-accounts.json}. */
     public static final String ACCOUNTS_FILE = "accounts";
 
