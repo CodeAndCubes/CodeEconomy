@@ -4,10 +4,11 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-import net.minecraft.entity.player.EntityPlayerMP;
-
+import com.mrleonardos.codecore.api.actor.PlayerRef;
 import com.mrleonardos.codecore.api.command.CommandContext;
+import com.mrleonardos.codecore.api.command.CommandSender;
 import com.mrleonardos.codecore.api.service.PermissionService;
+import com.mrleonardos.codecore.platform.Senders;
 import com.mrleonardos.codeeconomy.internal.Lazy;
 import com.mrleonardos.codeeconomy.internal.command.EconomySubjects;
 
@@ -32,8 +33,8 @@ final class SenderSubjects implements EconomySubjects {
 
     @Override
     public Optional<UUID> subjectOf(CommandContext context) {
-        EntityPlayerMP player = context.player();
-        return player == null ? Optional.<UUID>empty() : Optional.of(player.getUniqueID());
+        return senderOf(context).player()
+            .map(PlayerRef::id);
     }
 
     @Override
@@ -44,6 +45,10 @@ final class SenderSubjects implements EconomySubjects {
     @Override
     public boolean senderHas(CommandContext context, String node) {
         return permissions.get()
-            .has(context.sender(), node);
+            .has(senderOf(context), node);
+    }
+
+    private static CommandSender senderOf(CommandContext context) {
+        return Senders.of(context.sender());
     }
 }
