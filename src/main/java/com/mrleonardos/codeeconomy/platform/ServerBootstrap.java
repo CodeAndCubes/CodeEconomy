@@ -35,7 +35,9 @@ public final class ServerBootstrap implements ServerInstaller {
 
     private final MainThread mainThread = new MainThread();
     private final ServerClock clock = new ServerClock();
-    private final CorePlayerLookup lookup = new CorePlayerLookup();
+    private final CorePlayerLookup lookup = new CorePlayerLookup(
+        () -> CodeApi.services()
+            .require(PermissionService.class));
 
     private EventDispatcher events;
     private EconomyBootstrap bootstrap;
@@ -64,10 +66,15 @@ public final class ServerBootstrap implements ServerInstaller {
      * Владельца роли ядро выбирает в конце своей постинициализации, а команды отдаёт стартующему серверу
      * в своём обработчике {@code FMLServerStarting}, который идёт раньше нашего. Поэтому вопрос о
      * владельце и вся сборка стоят здесь: раньше ответа ещё нет, позже команды уже отданы.
+     *
+     * <p>
+     * По той же причине здесь стоит и вопрос про мету прав: до решения ролей реестр на него бросает
+     * исключение, а не отвечает.
      */
     @Override
     public void postInit() {
         EconomyApi.freeze();
+        lookup.checkMeta(CodeApi.adapters(), CodeEconomyMod.LOG);
         bootstrap.start(CodeApi.adapters(), this::takeTheRole);
     }
 
