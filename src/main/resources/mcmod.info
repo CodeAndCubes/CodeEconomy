@@ -6,7 +6,7 @@
 		"description": "Экономика сервера: валюты в json, журнал операций, атомарные переводы с идемпотентностью и команды /eco.",
 		"version": "${modVersion}",
 		"mcversion": "${minecraftVersion}",
-		"url": "",
+		"url": "https://github.com/CodeAndCubes/CodeEconomy",
 		"updateUrl": "",
 		"authorList": ["MrLeonardos"],
 		"credits": "",
