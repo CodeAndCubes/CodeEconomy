@@ -18,6 +18,9 @@ import com.mrleonardos.codecore.api.util.Scheduler;
 import com.mrleonardos.codeeconomy.api.EconomyCapabilities;
 import com.mrleonardos.codeeconomy.api.EconomyService;
 import com.mrleonardos.codeeconomy.api.EconomyServiceContract;
+import com.mrleonardos.codeeconomy.api.model.ResultCode;
+import com.mrleonardos.codeeconomy.api.model.TransferRequest;
+import com.mrleonardos.codeeconomy.api.model.TransferResult;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
 import com.mrleonardos.codeeconomy.internal.EconomyNodes;
 import com.mrleonardos.codeeconomy.internal.EconomySection;
@@ -125,6 +128,40 @@ class ForgeEssentialsContractTest extends EconomyServiceContract {
         assertFalse(
             service.account(EconomyFixtures.ALICE)
                 .isPresent());
+    }
+
+    /**
+     * Тихий провал add: списание у отправителя прошло, зачисление не подтвердилось. Успех с ложным
+     * балансом означал бы исчезнувшие деньги, поэтому перевод отвечает отказом и оставляет строку в
+     * логе.
+     */
+    @Test
+    void aSilentlyRefusedAddIsReportedAsFailureNotSuccess() {
+        give(EconomyFixtures.ALICE, 1000L);
+        give(EconomyFixtures.BOB, 500L);
+        foreign.ignoreWrites = true;
+
+        TransferResult result = service.transfer(
+            TransferRequest
+                .transfer(EconomyFixtures.ALICE, EconomyFixtures.BOB, 200L, service.defaultCurrencyId(), "tx1", null,
+                    null));
+
+        assertEquals(ResultCode.STORE_FAILURE, result.code(), "тихий провал add не проводится как успех");
+        assertEquals(800L, foreign.balanceOf(EconomyFixtures.ALICE), "списание у источника правда прошло");
+        assertEquals(500L, foreign.balanceOf(EconomyFixtures.BOB), "зачисление не подтвердилось");
+    }
+
+    /** Тихий провал set: установка отвечает отказом, а не успехом с прежним числом. */
+    @Test
+    void aSilentlyRefusedSetIsReportedAsFailureNotSuccess() {
+        give(EconomyFixtures.ALICE, 1000L);
+        foreign.ignoreWrites = true;
+
+        TransferResult result = service
+            .set(TransferRequest.set(EconomyFixtures.ALICE, 400L, service.defaultCurrencyId(), "tx2", null, null));
+
+        assertEquals(ResultCode.STORE_FAILURE, result.code());
+        assertEquals(1000L, foreign.balanceOf(EconomyFixtures.ALICE), "кошелёк не подтвердил установку");
     }
 
     @Test

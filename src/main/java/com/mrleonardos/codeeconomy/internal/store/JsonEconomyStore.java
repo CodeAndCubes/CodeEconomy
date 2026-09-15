@@ -273,20 +273,21 @@ public final class JsonEconomyStore implements EconomyStore, StoreMaintenance {
     /**
      * Хвост журнала, который переживает обрезку: строки свежее окна идемпотентности, прочитанные с
      * диска. Из кольцевой истории его строить нельзя: она ограничена по числу записей, и на оживлённом
-     * сервере из неё вытесняются операции, чьё окно ещё не вышло.
+     * сервере из неё вытесняются операции, чьё окно ещё не вышло. Оборванный хвост сюда не попадает:
+     * переписать его в новый журнал с терминатором значило бы провести запись, которая не проводилась.
      */
     private List<String> idempotencyTail() {
         if (idempotencyMillis <= 0L) {
             return Collections.emptyList();
         }
-        List<String> lines = Recovery.lines(journalPath(checkpointFile));
-        if (lines == null) {
+        Recovery.Read read = Recovery.read(journalPath(checkpointFile));
+        if (read == null) {
             log.warn("Journal cannot be read while compacting, the idempotency tail is dropped");
             return Collections.emptyList();
         }
         long cutoff = clock.getAsLong() - idempotencyMillis;
         List<String> tail = new ArrayList<>();
-        for (String line : lines) {
+        for (String line : read.lines()) {
             String trimmed = line.trim();
             if (trimmed.isEmpty()) {
                 continue;

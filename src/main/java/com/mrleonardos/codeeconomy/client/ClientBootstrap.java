@@ -15,6 +15,7 @@ import com.mrleonardos.codeeconomy.common.EconomyBridge;
 import com.mrleonardos.codeeconomy.common.SideBootstrap;
 import com.mrleonardos.codeeconomy.network.EconomyPackets;
 import com.mrleonardos.codeeconomy.network.c2s.BalanceRequestPacket;
+import com.mrleonardos.codeeconomy.network.c2s.BalanceUnwatchPacket;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -70,7 +71,9 @@ public final class ClientBootstrap implements SideBootstrap {
      *
      * <p>
      * Запоминается не сам факт запроса, а валюта, о которой просили. Правка {@code currency} в файле
-     * меняет её, и запрос уходит заново: иначе смена валюты ждала бы перезахода в мир.
+     * меняет её, и запрос уходит заново: иначе смена валюты ждала бы перезахода в мир. Выключение
+     * {@code enabled} снимает отметку и на сервере: без этого он слал бы пакеты до выхода игрока,
+     * хотя локальный экран уже погашен.
      */
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
@@ -84,6 +87,12 @@ public final class ClientBootstrap implements SideBootstrap {
         }
         ClientSettings options = settings.get();
         if (!options.enabled) {
+            if (askedFor != null) {
+                EconomyPackets.channel()
+                    .toServer(new BalanceUnwatchPacket());
+                askedFor = null;
+            }
+            balance.forget();
             return;
         }
         String wanted = options.currency == null ? "" : options.currency.trim();

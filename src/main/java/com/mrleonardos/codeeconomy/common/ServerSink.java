@@ -17,4 +17,7 @@ public interface ServerSink {
      * @param currencyId идентификатор валюты, пустая строка означает валюту сервера по умолчанию
      */
     void watch(PlayerRef player, String currencyId);
+
+    /** Клиент выключил показ: слать суммы больше не нужно. */
+    void unwatch(PlayerRef player);
 }

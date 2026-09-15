@@ -65,15 +65,24 @@ public final class LedgerAdapter implements RoleAdapter {
                 EconomyCapabilities.HISTORY));
     }
 
+    /**
+     * Роль наша, но имя провайдера хранилища в главном файле незнакомое: заявка закрывает роль пустым
+     * набором сервисов. Экономики нет ни в реестре ядра, ни на диске, а пользователь api видит отсутствие
+     * сервиса, как при любом другом выключенном шве.
+     */
     @Override
     public RoleServices create() {
         service = factory.get();
+        if (service == null) {
+            return RoleServices.builder()
+                .build();
+        }
         return RoleServices.builder()
             .add(EconomyService.class, service)
             .build();
     }
 
-    /** Собранный леджер или {@code null}, если роль ушла другому. */
+    /** Собранный леджер или {@code null}, если роль ушла другому или имя провайдера незнакомое. */
     public LedgerService service() {
         return service;
     }

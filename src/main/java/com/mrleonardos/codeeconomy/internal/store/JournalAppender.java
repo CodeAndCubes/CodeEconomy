@@ -6,12 +6,15 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
 
 final class JournalAppender {
 
     private static final String LINE_SEPARATOR = "\n";
+
+    private static final String TEMPORARY_SUFFIX = ".tmp";
 
     private final Path path;
     private FileChannel channel;
@@ -61,23 +64,58 @@ final class JournalAppender {
         }
     }
 
-    /** Заменить содержимое журнала указанными строками: обслуживание через {@code /eco compact}. */
+    /**
+     * Заменить содержимое журнала указанными строками: обслуживание через {@code /eco compact} и выгрузка
+     * снимка. Новый файл пишется рядом и подменяет старый одним переносом после сброса на диск, поэтому
+     * сбой на любом шаге оставляет прежний журнал нетронутым: обрезка на месте теряла бы хвост без
+     * возврата, и повтор платежа в окне идемпотентности проводился бы второй раз.
+     */
     synchronized void rewrite(List<String> lines) throws IOException {
-        FileChannel target = channel();
-        target.truncate(0L);
+        Path temporary = path.resolveSibling(
+            path.getFileName()
+                .toString() + TEMPORARY_SUFFIX);
+        try {
+            writeAll(temporary, lines);
+            close();
+            Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException failure) {
+            discard(temporary);
+            throw failure;
+        }
+        untrusted = false;
+    }
+
+    private static void writeAll(Path target, List<String> lines) throws IOException {
+        FileChannel fresh = FileChannel
+            .open(target, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
+        try {
+            ByteBuffer source = ByteBuffer.wrap(
+                encoded(lines)
+                    .getBytes(StandardCharsets.UTF_8));
+            while (source.hasRemaining()) {
+                fresh.write(source);
+            }
+            fresh.force(true);
+        } finally {
+            fresh.close();
+        }
+    }
+
+    private static String encoded(List<String> lines) {
         StringBuilder tail = new StringBuilder();
         for (String line : lines) {
             tail.append(line)
                 .append(LINE_SEPARATOR);
         }
-        ByteBuffer source = ByteBuffer.wrap(
-            tail.toString()
-                .getBytes(StandardCharsets.UTF_8));
-        while (source.hasRemaining()) {
-            target.write(source);
+        return tail.toString();
+    }
+
+    private static void discard(Path temporary) {
+        try {
+            Files.deleteIfExists(temporary);
+        } catch (IOException ignored) {
+            // остаётся лежать рядом: следующая обрезка затрёт его сама
         }
-        target.force(true);
-        untrusted = false;
     }
 
     synchronized void reset() throws IOException {

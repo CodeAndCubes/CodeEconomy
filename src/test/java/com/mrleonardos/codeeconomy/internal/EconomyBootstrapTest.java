@@ -66,7 +66,8 @@ class EconomyBootstrapTest {
 
     /**
      * Общее для линейки и своё для роли приезжает из главного файла целиком: провайдер перекрыт секцией
-     * роли, границы перевода взяты из секции economy, а в economy.toml этих ключей нет вовсе.
+     * роли, границы перевода взяты из секции economy, а в economy.toml этих ключей нет вовсе. Общий
+     * провайдер назван незнакомым именем нарочно: решение принимает секция роли, и мод работает.
      */
     @Test
     void theMainFileIsReadWithTheOverrideOfThisRole() {
@@ -74,10 +75,10 @@ class EconomyBootstrapTest {
             root,
             "schemaVersion = 1",
             "[storage]",
-            "provider = \"json\"",
+            "provider = \"sql\"",
             "autosaveSeconds = 30",
             "[storage.economy]",
-            "provider = \"sql\"",
+            "provider = \"json\"",
             "autosaveSeconds = 120",
             "[audit]",
             "logChanges = false",
@@ -89,10 +90,45 @@ class EconomyBootstrapTest {
         bootstrap.start(adapters, taken::add);
 
         EconomyConfig config = bootstrap.config();
-        assertEquals("sql", config.provider(), "секция роли перекрывает общего провайдера");
+        assertEquals("json", config.provider(), "секция роли перекрывает общего провайдера");
         assertEquals(120 * 20, config.autosaveTicks(), "и общий автосейв тоже");
         assertFalse(config.logChanges(), "записи в лог общие для линейки");
         assertEquals(500L, config.maxTransfer(), "границы перевода приезжают из секции economy");
+    }
+
+    /**
+     * Незнакомое имя шва выключает зависящее от него: мод выигрывает роль, но не поднимает ни сервиса,
+     * ни журнала, ни одного файла. Отката на встроенное хранилище нет, и молчаливый откат был бы
+     * потерей чужих денег под видом своих.
+     */
+    @Test
+    void anUnknownProviderNameStandsTheModDown() {
+        TestConfigs.writeMain(
+            root,
+            "schemaVersion = 1",
+            "[storage]",
+            "provider = \"mongo\"");
+        configs = TestConfigs.of(root);
+        EconomyBootstrap bootstrap = declared();
+        adapters.decide(ConfigRoles.ECONOMY, TestAdapters.AUTO);
+
+        assertFalse(bootstrap.start(adapters, taken::add));
+        assertTrue(bootstrap.stoodDownForStorage(), "отход случился из-за провайдера, а не из-за роли");
+        assertNull(bootstrap.service());
+        assertTrue(taken.isEmpty(), "ни команд, ни подписок, ни писателя");
+        assertFalse(Files.exists(settings()), "свои настройки не создаются");
+        assertFalse(Files.exists(currencies()), "валюты не создаются");
+        assertFalse(Files.exists(accounts()), "чекпоинт не создаётся");
+    }
+
+    /** Отход по провайдеру отличим от отхода по роли: команды остаются и отвечают «выключено». */
+    @Test
+    void aStandDownByTheRoleIsNotAStandDownByTheProvider() {
+        EconomyBootstrap bootstrap = declared();
+        adapters.decide(ConfigRoles.ECONOMY, ForgeEssentialsAdapter.NAME);
+
+        assertFalse(bootstrap.start(adapters, taken::add));
+        assertFalse(bootstrap.stoodDownForStorage());
     }
 
     /**

@@ -26,6 +26,12 @@ public final class ClientBalance implements ClientSink {
         this.known = true;
     }
 
+    /** Сервер снял показ: последнее число больше не показывается как действительное. */
+    @Override
+    public void hide() {
+        known = false;
+    }
+
     /** Игрок вышел из мира: на следующем сервере счёт другой. */
     public void forget() {
         known = false;

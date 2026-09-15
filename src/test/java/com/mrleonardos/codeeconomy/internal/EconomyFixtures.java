@@ -173,25 +173,35 @@ public final class EconomyFixtures {
     }
 
     /**
-     * Собранный сервис на встроенном провайдере с файлами во временной папке теста.
-     *
-     * <p>
-     * Провайдер спрашивается по несуществующему имени нарочно: общий реестр {@code EconomyApi} держит
-     * чужого провайдера с именем json, и без этого сервис забрал бы его.
+     * Собранный сервис на встроенном провайдере с файлами во временной папке теста. Провайдер строится
+     * прямо, а не по имени из реестра: общий реестр {@code EconomyApi} в полном прогоне держит чужого
+     * провайдера с именем json, и незнакомое имя теперь выключает экономику, а не откатывается на
+     * встроенную.
      */
     public static LedgerService service(TestConfigs configs, List<CurrencyRecord> currencies) {
-        Configs config = configs();
-        config.provider = "builtin-under-test";
+        EconomyConfig config = config();
         return LedgerService.create(
-            config.build(),
+            jsonStore(configs, currencies, config.idempotencyMillis(), System::currentTimeMillis),
+            config,
             currencies,
-            configs.open(JsonEconomyStore.spec()),
             inlineScheduler(),
             () -> true,
             () -> 0L,
             System::currentTimeMillis,
             lookup(),
             new EventDispatcher(LOG),
+            LOG);
+    }
+
+    /** Встроенный json-провайдер с файлами во временной папке теста. */
+    public static JsonEconomyStore jsonStore(TestConfigs configs, List<CurrencyRecord> currencies,
+        long idempotencyMillis, LongSupplier clock) {
+        return new JsonEconomyStore(
+            configs.open(JsonEconomyStore.spec()),
+            config().ceilings(LOG),
+            JsonEconomyStore.starting(currencies),
+            idempotencyMillis,
+            clock,
             LOG);
     }
 

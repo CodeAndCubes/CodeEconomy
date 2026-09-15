@@ -2,7 +2,6 @@ package com.mrleonardos.codeeconomy.platform;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 import com.mrleonardos.codecore.api.command.ArgumentType;
@@ -15,8 +14,6 @@ import com.mrleonardos.codeeconomy.internal.command.EconomyArguments;
 import com.mrleonardos.codeeconomy.internal.command.EconomyMessages;
 
 final class PlatformArguments implements EconomyArguments {
-
-    private static final int SUGGESTION_LIMIT = 50;
 
     private final NameResolver names;
     private final EconomyService economy;
@@ -42,7 +39,7 @@ final class PlatformArguments implements EconomyArguments {
 
             @Override
             public List<String> suggestions(CommandSender sender, String partial) {
-                return names.suggest(partial, SUGGESTION_LIMIT);
+                return names.suggest(partial, NameResolver.SUGGESTION_LIMIT);
             }
         };
     }
@@ -58,7 +55,7 @@ final class PlatformArguments implements EconomyArguments {
 
             @Override
             public List<String> suggestions(CommandSender sender, String partial) {
-                return startingWith(visibleCurrencies(), partial);
+                return NameResolver.startingWith(visibleCurrencies(), partial, NameResolver.SUGGESTION_LIMIT);
             }
         };
     }
@@ -71,20 +68,5 @@ final class PlatformArguments implements EconomyArguments {
             }
         }
         return ids;
-    }
-
-    private static List<String> startingWith(Iterable<String> candidates, String partial) {
-        List<String> found = new ArrayList<>();
-        String prefix = partial.toLowerCase(Locale.ROOT);
-        for (String candidate : candidates) {
-            if (candidate.toLowerCase(Locale.ROOT)
-                .startsWith(prefix)) {
-                found.add(candidate);
-                if (found.size() == SUGGESTION_LIMIT) {
-                    break;
-                }
-            }
-        }
-        return found;
     }
 }

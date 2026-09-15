@@ -7,6 +7,7 @@ import com.mrleonardos.codecore.platform.PlayerRefs;
 import com.mrleonardos.codecore.platform.Players;
 import com.mrleonardos.codeeconomy.internal.hud.BalanceHudSink;
 import com.mrleonardos.codeeconomy.network.EconomyPackets;
+import com.mrleonardos.codeeconomy.network.s2c.BalanceHidePacket;
 import com.mrleonardos.codeeconomy.network.s2c.BalancePacket;
 
 /**
@@ -26,5 +27,15 @@ final class BalanceSender implements BalanceHudSink {
         }
         EconomyPackets.channel()
             .toPlayer(new BalancePacket(currencyId, amount, decimals), online);
+    }
+
+    @Override
+    public void hide(UUID player) {
+        PlayerRef online = PlayerRefs.of(Players.online(player));
+        if (online == null) {
+            return;
+        }
+        EconomyPackets.channel()
+            .toPlayer(new BalanceHidePacket(), online);
     }
 }

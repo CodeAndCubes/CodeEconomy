@@ -17,6 +17,9 @@ public final class FakeForgeEssentials implements Economy {
 
     private final Map<UUID, Long> wallets = new LinkedHashMap<>();
 
+    /** Режим тихого провала: кошелёк принимает вызовы и ничего не меняет. */
+    public boolean ignoreWrites;
+
     /** Поставить экономику в чужой реестр, как это делает сам мод при подъёме своего модуля. */
     public static FakeForgeEssentials install() {
         FakeForgeEssentials economy = new FakeForgeEssentials();
@@ -68,12 +71,16 @@ public final class FakeForgeEssentials implements Economy {
 
         @Override
         public void set(long value) {
-            put(owner, value);
+            if (!ignoreWrites) {
+                put(owner, value);
+            }
         }
 
         @Override
         public void add(long amount) {
-            put(owner, balanceOf(owner) + amount);
+            if (!ignoreWrites) {
+                put(owner, balanceOf(owner) + amount);
+            }
         }
 
         @Override

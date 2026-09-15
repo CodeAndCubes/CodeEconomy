@@ -1,5 +1,7 @@
 package com.mrleonardos.codeeconomy.internal.hud;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -26,7 +28,8 @@ import com.mrleonardos.codeeconomy.internal.service.PlayerLookup;
  *
  * <p>
  * Источник изменений это {@link BalanceChange}, который уже коалесцируется за тик по игроку и валюте.
- * Своего опроса счетов у показа нет.
+ * Своего опроса счетов у показа нет, кроме перепроверки права: смена ответа на ноду обновляет экран и
+ * без изменения счёта.
  */
 public final class BalanceHud implements EconomyListener {
 
@@ -35,6 +38,7 @@ public final class BalanceHud implements EconomyListener {
     private final BalanceHudSink sink;
     private final Logger log;
     private final BalanceWatchers watchers = new BalanceWatchers();
+    private final Map<UUID, Boolean> verdicts = new HashMap<>();
 
     public BalanceHud(EconomyService economy, PlayerLookup lookup, BalanceHudSink sink, Logger log) {
         this.economy = economy;
@@ -59,11 +63,38 @@ public final class BalanceHud implements EconomyListener {
     /** Игрок ушёл. */
     public void forget(UUID player) {
         watchers.forget(player);
+        verdicts.remove(player);
     }
 
     @Override
     public void onBalanceChange(BalanceChange event) {
         push(event.player(), event.currencyId(), event.after());
+    }
+
+    /**
+     * Перепроверить право показа у всех, кто просил. Снятие ноды не меняет счёт, поэтому без этой
+     * проверки число висело бы на экране до первого платежа или перезахода: вернувшаяся нода,
+     * наоборот, зажигает показ текущим числом.
+     */
+    public void recheck() {
+        for (UUID player : watchers.players()) {
+            String currencyId = watchers.currency(player);
+            if (currencyId == null) {
+                continue;
+            }
+            boolean permit = allowed(player);
+            Boolean known = verdicts.get(player);
+            if (known != null && known.booleanValue() == permit) {
+                continue;
+            }
+            verdicts.put(player, Boolean.valueOf(permit));
+            if (permit) {
+                watchers.resetSent(player);
+                push(player, currencyId, economy.balance(player, currencyId));
+            } else {
+                sink.hide(player);
+            }
+        }
     }
 
     /**
@@ -75,7 +106,9 @@ public final class BalanceHud implements EconomyListener {
         if (!currencyId.equals(watchers.currency(player))) {
             return;
         }
-        if (!allowed(player)) {
+        boolean permit = allowed(player);
+        verdicts.put(player, Boolean.valueOf(permit));
+        if (!permit) {
             return;
         }
         if (!watchers.takeUpdate(player, currencyId, amount)) {

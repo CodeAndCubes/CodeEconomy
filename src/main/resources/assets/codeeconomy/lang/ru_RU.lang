@@ -17,6 +17,7 @@ codeeconomy.command.usage.eco.unlock=/eco unlock
 codeeconomy.command.usage.eco.import=/eco import <формат> [файл] [--apply]
 
 codeeconomy.message.eco.branches=Ветки: %s
+codeeconomy.message.off=Экономика выключена: провайдер хранилища из главного файла не зарегистрирован. Сообщите администратору
 
 codeeconomy.message.balance.self=Баланс: %s
 codeeconomy.message.balance.show=Баланс %s: %s
@@ -29,6 +30,7 @@ codeeconomy.message.reset.done=Баланс игрока %s возвращён �
 codeeconomy.message.freeze.on=Счёт игрока %s заморожен
 codeeconomy.message.freeze.off=Счёт игрока %s разморожен
 codeeconomy.message.verify.started=Проверка журнала запущена, отчёт будет в логе сервера
+codeeconomy.message.verify.busy=Сверка уже идёт, дождитесь отчёта в логе сервера
 codeeconomy.message.import.skip=Отклонено: %s
 codeeconomy.message.checkpoint.done=Снимок записан, граница %s
 codeeconomy.message.compact.done=Чекпоинт переписан, журнал обрезан, граница %s

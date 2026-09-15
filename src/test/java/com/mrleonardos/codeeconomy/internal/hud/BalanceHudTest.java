@@ -19,6 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.mrleonardos.codeeconomy.api.CurrencyIds;
 import com.mrleonardos.codeeconomy.api.model.ChangeCause;
+import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
 import com.mrleonardos.codeeconomy.api.model.TransferRequest;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
 import com.mrleonardos.codeeconomy.internal.EconomyNodes;
@@ -26,7 +27,6 @@ import com.mrleonardos.codeeconomy.internal.TestConfigs;
 import com.mrleonardos.codeeconomy.internal.event.EventDispatcher;
 import com.mrleonardos.codeeconomy.internal.service.LedgerService;
 import com.mrleonardos.codeeconomy.internal.service.PlayerLookup;
-import com.mrleonardos.codeeconomy.internal.store.JsonEconomyStore;
 
 /**
  * Кому и когда уходит показ баланса.
@@ -57,14 +57,13 @@ class BalanceHudTest {
         withBalanceNode.add(EconomyFixtures.BOB);
 
         EconomyFixtures.Configs config = EconomyFixtures.configs();
-        config.provider = "builtin-under-test";
         EventDispatcher events = new EventDispatcher(EconomyFixtures.LOG);
         PlayerLookup lookup = lookup();
+        List<CurrencyRecord> currencies = Arrays.asList(EconomyFixtures.coin(), EconomyFixtures.credit());
         service = LedgerService.create(
+            EconomyFixtures.jsonStore(TestConfigs.of(root), currencies, config.build().idempotencyMillis(), () -> 1000L),
             config.build(),
-            Arrays.asList(EconomyFixtures.coin(), EconomyFixtures.credit()),
-            TestConfigs.of(root)
-                .open(JsonEconomyStore.spec()),
+            currencies,
             EconomyFixtures.inlineScheduler(),
             () -> true,
             () -> 0L,
@@ -113,6 +112,52 @@ class BalanceHudTest {
             Collections.singletonList(line(EconomyFixtures.ALICE, COIN, COIN_START + 800L, 2)),
             sent.lines,
             "отказ по праву не запоминается как отправленная сумма, иначе экран остался бы с прежним числом");
+    }
+
+    /**
+     * Снятие ноды не меняет счёт, поэтому без перепроверки число висело бы на экране до первого платежа
+     * или перезахода. Перепроверка гасит экран сразу.
+     */
+    @Test
+    void aRevokedNodeHidesTheDisplayWithoutABalanceChange() {
+        watching(EconomyFixtures.ALICE, COIN);
+        withBalanceNode.remove(EconomyFixtures.ALICE);
+
+        hud.recheck();
+
+        assertEquals(
+            Collections.singletonList("hide " + EconomyFixtures.ALICE),
+            sent.hidden,
+            "снятая нода гасит показ без изменения счёта");
+        assertTrue(sent.lines.isEmpty(), "повторно слать нечего");
+    }
+
+    @Test
+    void aReturnedNodeLightsTheDisplayWithoutABalanceChange() {
+        watching(EconomyFixtures.ALICE, COIN);
+        withBalanceNode.remove(EconomyFixtures.ALICE);
+        hud.recheck();
+        sent.hidden.clear();
+        withBalanceNode.add(EconomyFixtures.ALICE);
+
+        hud.recheck();
+
+        assertEquals(
+            Collections.singletonList(line(EconomyFixtures.ALICE, COIN, COIN_START, 2)),
+            sent.lines,
+            "вернувшаяся нода зажигает показ текущим числом, хотя счёт не менялся");
+        assertTrue(sent.hidden.isEmpty());
+    }
+
+    @Test
+    void recheckKeepsSilenceWhileTheVerdictStands() {
+        watching(EconomyFixtures.ALICE, COIN);
+
+        hud.recheck();
+        hud.recheck();
+
+        assertTrue(sent.lines.isEmpty(), "вердикт не менялся, слать нечего");
+        assertTrue(sent.hidden.isEmpty(), "и прятать нечего");
     }
 
     @Test
@@ -294,9 +339,16 @@ class BalanceHudTest {
 
         private final List<String> lines = new ArrayList<>();
 
+        private final List<String> hidden = new ArrayList<>();
+
         @Override
         public void send(UUID player, String currencyId, long amount, int decimals) {
             lines.add(line(player, currencyId, amount, decimals));
+        }
+
+        @Override
+        public void hide(UUID player) {
+            hidden.add("hide " + player);
         }
     }
 }

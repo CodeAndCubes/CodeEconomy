@@ -30,8 +30,11 @@ public final class EconomyLimits {
     /** Наибольшее число счетов в файле состояния. */
     public static final int DEFAULT_ACCOUNTS = 200000;
 
-    /** Наибольшее число записей истории, которое держит движок. */
-    public static final int DEFAULT_HISTORY_ENTRIES = 10000;
+    /**
+     * Наибольшее число записей истории, которое держит движок. Это потолок, а не заводское значение
+     * настройки: заводское живёт в {@code EconomySettings.DEFAULT_HISTORY_ENTRIES} и называет другое.
+     */
+    public static final int HISTORY_ENTRIES_CAP = 10000;
 
     /** Наименьшее допустимое число знаков после разделителя. */
     public static final int MIN_DECIMALS = 0;
@@ -63,7 +66,7 @@ public final class EconomyLimits {
             DEFAULT_REASON_LENGTH,
             DEFAULT_CURRENCIES,
             DEFAULT_ACCOUNTS,
-            DEFAULT_HISTORY_ENTRIES);
+            HISTORY_ENTRIES_CAP);
     }
 
     /** Начать собирать потолки из значений конфига. */
@@ -156,7 +159,7 @@ public final class EconomyLimits {
         private int reasonLength = DEFAULT_REASON_LENGTH;
         private int currencies = DEFAULT_CURRENCIES;
         private int accounts = DEFAULT_ACCOUNTS;
-        private int historyEntries = DEFAULT_HISTORY_ENTRIES;
+        private int historyEntries = HISTORY_ENTRIES_CAP;
         private final List<String> remarks = new ArrayList<>();
 
         private Builder() {}
@@ -190,7 +193,7 @@ public final class EconomyLimits {
          * считаются отсутствующим и дают заводское.
          */
         public Builder historyEntries(int value) {
-            historyEntries = clampPositive(value, DEFAULT_HISTORY_ENTRIES, "historyEntries");
+            historyEntries = clampPositive(value, HISTORY_ENTRIES_CAP, "historyEntries");
             return this;
         }
 

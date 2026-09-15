@@ -10,8 +10,6 @@ import java.util.function.LongSupplier;
 
 import org.apache.logging.log4j.Logger;
 
-import com.google.gson.JsonObject;
-import com.mrleonardos.codecore.api.config.ConfigFile;
 import com.mrleonardos.codecore.api.util.Scheduler;
 import com.mrleonardos.codeeconomy.api.EconomyApi;
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
@@ -33,8 +31,6 @@ import com.mrleonardos.codeeconomy.internal.engine.Ledger;
 import com.mrleonardos.codeeconomy.internal.event.EventDispatcher;
 import com.mrleonardos.codeeconomy.internal.guard.GuardChain;
 import com.mrleonardos.codeeconomy.internal.guard.PayCooldownGuard;
-import com.mrleonardos.codeeconomy.internal.store.Currencies;
-import com.mrleonardos.codeeconomy.internal.store.JsonEconomyStore;
 
 /**
  * Реализация {@link EconomyService}: деньги сервера.
@@ -63,21 +59,21 @@ public final class LedgerService implements EconomyService {
     }
 
     /**
-     * Собрать сервис: пустое состояние, слушатели на местах.
+     * Собрать сервис на уже решённом провайдере: пустое состояние, слушатели на местах.
      *
      * <p>
-     * Провайдер и цепочка гвардов выбираются лениво, при первом обращении к деньгам. Реестры
-     * {@code EconomyApi} открыты всю фазу инициализации, а мод, загруженный после codeeconomy,
-     * регистрируется в своём init: посчитай мы провайдера сразу, его SqlStore молча остался бы за
-     * бортом. Состояние мира на этот момент тоже не открыто, поэтому загрузка идёт отдельно, в
-     * {@link #loadWorld()} при старте мира.
+     * Имя из {@code [storage] provider} разбирает {@code EconomyBootstrap} до этой точки: незнакомое
+     * имя выключает экономику целиком, отката на встроенное нет. Цепочка гвардов выбирается лениво, при
+     * первом обращении к деньгам: реестры {@code EconomyApi} открыты всю фазу инициализации, и мод,
+     * загруженный после codeeconomy, регистрируется в своём init. Состояние мира на этот момент тоже не
+     * открыто, поэтому загрузка идёт отдельно, в {@link #loadWorld()} при старте мира.
      */
-    public static LedgerService create(EconomyConfig config, List<CurrencyRecord> currencies,
-        ConfigFile<JsonObject> checkpointFile, Scheduler scheduler, BooleanSupplier mainThread, LongSupplier ticks,
-        LongSupplier clock, PlayerLookup lookup, EventDispatcher events, Logger log) {
+    public static LedgerService create(EconomyStore store, EconomyConfig config, List<CurrencyRecord> currencies,
+        Scheduler scheduler, BooleanSupplier mainThread, LongSupplier ticks, LongSupplier clock,
+        PlayerLookup lookup, EventDispatcher events, Logger log) {
         EconomyLimits limits = config.ceilings(log);
         Ledger ledger = new Ledger(
-            () -> resolveProvider(config, currencies, checkpointFile, clock, limits, log),
+            () -> store,
             currencies,
             config.currencyId(),
             config,
@@ -101,43 +97,6 @@ public final class LedgerService implements EconomyService {
             guards.add(new PayCooldownGuard(config.payCooldownSeconds(), clock));
         }
         return guards;
-    }
-
-    /**
-     * Активный провайдер: зарегистрированный под именем из {@code [storage] provider}, иначе встроенный
-     * json. Уход на встроенный это авария конфигурации, поэтому в лог попадает и запрошенное имя, и
-     * перечень того, что вообще зарегистрировано.
-     */
-    static EconomyStore resolveProvider(EconomyConfig config, List<CurrencyRecord> currencies,
-        ConfigFile<JsonObject> checkpointFile, LongSupplier clock, EconomyLimits limits, Logger log) {
-        String configured = config.provider();
-        Optional<EconomyStore> foreign = EconomyApi.store(configured);
-        if (foreign.isPresent()) {
-            log.info("Economy storage provider is {}", configured);
-            return foreign.get();
-        }
-        if (!JsonEconomyStore.ID.equals(configured)) {
-            log.warn(
-                "Storage provider {} is not registered, falling back to {}. Registered providers: {}",
-                configured,
-                JsonEconomyStore.ID,
-                registeredIds());
-        }
-        return new JsonEconomyStore(
-            checkpointFile,
-            limits,
-            Currencies.startBalances(currencies),
-            config.idempotencyMillis(),
-            clock,
-            log);
-    }
-
-    private static List<String> registeredIds() {
-        List<String> ids = new ArrayList<>();
-        for (EconomyStore store : EconomyApi.stores()) {
-            ids.add(store.id());
-        }
-        return ids;
     }
 
     @Override

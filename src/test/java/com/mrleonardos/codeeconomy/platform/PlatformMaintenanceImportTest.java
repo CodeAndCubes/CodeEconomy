@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -16,7 +17,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.mrleonardos.codeeconomy.EconomyConstants;
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
+import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
 import com.mrleonardos.codeeconomy.api.model.ResultCode;
+import com.mrleonardos.codeeconomy.internal.EconomyConfig;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
 import com.mrleonardos.codeeconomy.internal.TestConfigs;
 import com.mrleonardos.codeeconomy.internal.command.EconomyMessages;
@@ -39,7 +42,7 @@ class PlatformMaintenanceImportTest {
         Path source = source();
         LedgerService service = service();
 
-        MaintenanceOutcome outcome = maintenance(service).importBalances("flatjson", source.toString(), false);
+        MaintenanceOutcome outcome = maintenance(service).importBalances("flatjson", "import.json", false);
 
         assertTrue(outcome.successful());
         assertEquals(
@@ -64,9 +67,10 @@ class PlatformMaintenanceImportTest {
 
     @Test
     void applyWritesOneMigrationRecordPerAccount() throws Exception {
+        source();
         LedgerService service = service();
 
-        MaintenanceOutcome outcome = maintenance(service).importBalances("flatjson", source().toString(), true);
+        MaintenanceOutcome outcome = maintenance(service).importBalances("flatjson", "import.json", true);
 
         assertTrue(outcome.successful());
         assertEquals(1250L, service.balance(EconomyFixtures.ALICE, "coin"));
@@ -79,11 +83,12 @@ class PlatformMaintenanceImportTest {
 
     @Test
     void repeatedImportWritesNothingNew() throws Exception {
+        source();
         LedgerService service = service();
-        maintenance(service).importBalances("flatjson", source().toString(), true);
+        maintenance(service).importBalances("flatjson", "import.json", true);
         int before = journalLines().length;
 
-        MaintenanceOutcome outcome = maintenance(service).importBalances("flatjson", source().toString(), true);
+        MaintenanceOutcome outcome = maintenance(service).importBalances("flatjson", "import.json", true);
 
         assertTrue(outcome.successful());
         assertEquals(before, journalLines().length, "повторный импорт дублей в журнал не пишет");
@@ -92,9 +97,9 @@ class PlatformMaintenanceImportTest {
 
     @Test
     void rejectedLinesAreListedPerLine() throws Exception {
-        Path source = write("broken.json", "{\"" + ALICE + "\": -5, \"" + BOB + "\": 100}");
+        write("broken.json", "{\"" + ALICE + "\": -5, \"" + BOB + "\": 100}");
 
-        MaintenanceOutcome outcome = maintenance(service()).importBalances("flatjson", source.toString(), false);
+        MaintenanceOutcome outcome = maintenance(service()).importBalances("flatjson", "broken.json", false);
 
         assertTrue(outcome.successful());
         assertEquals(
@@ -132,15 +137,13 @@ class PlatformMaintenanceImportTest {
     }
 
     private LedgerService service() {
-        EconomyFixtures.Configs config = EconomyFixtures.configs();
-        // другой тест держит в общем реестре EconomyApi чужого провайдера с именем json, поэтому
-        // зовём несуществующее имя: сервис возьмёт встроенного провайдера и будет писать журнал сюда
-        config.provider = "builtin-under-test";
         TestConfigs files = TestConfigs.of(root);
+        List<CurrencyRecord> currencies = Collections.singletonList(EconomyFixtures.coin());
+        EconomyConfig config = EconomyFixtures.configs().build();
         return LedgerService.create(
-            config.build(),
-            Collections.singletonList(EconomyFixtures.coin()),
-            files.open(JsonEconomyStore.spec()),
+            EconomyFixtures.jsonStore(files, currencies, config.idempotencyMillis(), now::get),
+            config,
+            currencies,
             new com.mrleonardos.codecore.api.util.Scheduler() {
 
                 @Override
@@ -193,10 +196,10 @@ class PlatformMaintenanceImportTest {
         for (int index = 0; index < 150; index++) {
             name.append('n');
         }
-        Path source = write(name + ".json", "{\"" + ALICE + "\": 1250}");
+        write(name + ".json", "{\"" + ALICE + "\": 1250}");
         LedgerService service = service();
 
-        MaintenanceOutcome outcome = maintenance(service).importBalances("flatjson", source.toString(), true);
+        MaintenanceOutcome outcome = maintenance(service).importBalances("flatjson", name + ".json", true);
 
         assertTrue(outcome.successful());
         assertEquals(
@@ -205,5 +208,54 @@ class PlatformMaintenanceImportTest {
                 .get(0),
             "длинное имя источника перенос не ломает");
         assertEquals(1250L, service.balance(EconomyFixtures.ALICE, "coin"));
+    }
+
+    /**
+     * Право на импорт не открывает произвольные файлы диска: абсолютный путь и выход через {@code ..}
+     * отвергаются, разбирается только то, что лежит в папке источника.
+     */
+    @Test
+    void anAbsoluteOrEscapingSourceIsRefused() throws Exception {
+        Path source = source();
+        PlatformMaintenance maintenance = maintenance(service());
+
+        assertEquals(
+            ResultCode.INVALID_REQUEST,
+            maintenance
+                .importBalances("flatjson", source.toString(), false)
+                .code()
+                .get(),
+            "абсолютный путь отвергнут");
+        assertEquals(
+            ResultCode.INVALID_REQUEST,
+            maintenance
+                .importBalances("flatjson", "../" + source.getFileName(), false)
+                .code()
+                .get(),
+            "выход за папку источника отвергнут");
+        assertFalse(Files.exists(journal()), "отвергнутый путь ничего не читает и не пишет");
+    }
+
+    /** Сто нажатий это не сто полных сверок: пока прошлая идёт, новая отвечает занятостью. */
+    @Test
+    void aSecondVerifyWhileOneRunsAnswersBusy() {
+        List<Runnable> held = new ArrayList<>();
+        PlatformMaintenance maintenance = new PlatformMaintenance(
+            service(),
+            EconomyLimits.defaults(),
+            () -> root,
+            EconomyFixtures.LOG,
+            held::add);
+
+        assertTrue(maintenance.verify().successful(), "первая сверка началась");
+        assertEquals(
+            ResultCode.BUSY,
+            maintenance.verify()
+                .code()
+                .get(),
+            "вторая, пока первая не кончилась, не начинается");
+        held.forEach(Runnable::run);
+
+        assertTrue(maintenance.verify().successful(), "после окончания сверки новая начинается");
     }
 }

@@ -18,4 +18,7 @@ public interface BalanceHudSink {
      * @param decimals сколько младших знаков показывать человеку
      */
     void send(UUID player, String currencyId, long amount, int decimals);
+
+    /** Убрать показ с экрана игрока: право сняли, а следующего изменения счёта может не быть. */
+    void hide(UUID player);
 }

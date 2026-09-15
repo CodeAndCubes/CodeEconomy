@@ -296,6 +296,89 @@ class JsonEconomyStoreTest {
                 .written());
     }
 
+    /**
+     * Обрезка журнала идёт через временный файл и одну подмену: сбой на любом шагу оставляет прежний
+     * журнал нетронутым. Обрезка на месте теряла бы хвост без возврата, и повтор платежа в окне
+     * идемпотентности проводился бы второй раз. Временный путь занимает каталог: открыть на нём файл
+     * нельзя ни на Windows, ни на Linux.
+     */
+    @Test
+    void aFailedCompactionLeavesTheJournalIntact() throws Exception {
+        JsonEconomyStore first = storeWithWindow(0L);
+        first.apply(batch(record(1L, transfer(1000L)), account(ALICE_KEY, 26000L)));
+        String before = new String(Files.readAllBytes(journalPath()), StandardCharsets.UTF_8);
+        Files.createDirectory(journalPath().resolveSibling(EconomyConstants.JOURNAL_FILE + ".tmp"));
+
+        assertFalse(
+            first.save(stateOf(1L, account(ALICE_KEY, 26000L)))
+                .successful(),
+            "обрезка на недоступном временном файле падает");
+
+        assertEquals(
+            before,
+            new String(Files.readAllBytes(journalPath()), StandardCharsets.UTF_8),
+            "прежний журнал нетронут");
+        assertEquals(
+            1L,
+            storeWithWindow(0L).load()
+                .lastSeq(),
+            "записи пережили неудачную обрезку");
+    }
+
+    /** После обрезки приложение продолжает писать: канал открывается заново поверх нового файла. */
+    @Test
+    void compactionReplacesTheJournalAndAppendingContinues() throws Exception {
+        JsonEconomyStore first = storeWithWindow(0L);
+        first.apply(batch(record(1L, transfer(1000L)), account(ALICE_KEY, 26000L)));
+        assertTrue(
+            first.save(stateOf(1L, account(ALICE_KEY, 26000L)))
+                .successful());
+        assertFalse(
+            Files.exists(journalPath().resolveSibling(EconomyConstants.JOURNAL_FILE + ".tmp")),
+            "временный файл после обрезки не остаётся");
+
+        first.apply(batch(record(2L, deposit(500L)), account(BOB_KEY, 25500L)));
+
+        StoreSnapshot after = storeWithWindow(0L).load();
+        assertEquals(
+            1,
+            after.transactions()
+                .size(),
+            "запись после обрезки ложится в новый файл");
+        assertEquals(2L, after.lastSeq());
+    }
+
+    /**
+     * Каждое повреждение журнала оставляет свой файл: затирая прежний карантин, мод прятал бы след
+     * предыдущей потери от администратора.
+     */
+    @Test
+    void everyQuarantineKeepsItsOwnFile() throws Exception {
+        damageTheMiddleLine();
+        assertTrue(
+            store().load()
+                .readOnly());
+
+        JsonEconomyStore second = store();
+        second.apply(batch(record(1L, transfer(1000L)), account(ALICE_KEY, 26000L)));
+        second.apply(batch(record(2L, deposit(500L)), account(BOB_KEY, 25500L)));
+        String journal = new String(Files.readAllBytes(journalPath()), StandardCharsets.UTF_8);
+        String[] lines = journal.split("\n");
+        Files.write(
+            journalPath(),
+            (lines[0] + "\nnot a json line at all\n" + lines[1] + "\n").getBytes(StandardCharsets.UTF_8));
+        assertTrue(
+            store().load()
+                .readOnly());
+
+        assertTrue(
+            Files.exists(journalPath().resolveSibling(EconomyConstants.JOURNAL_FILE + ".quarantine")),
+            "первый след на месте");
+        assertTrue(
+            Files.exists(journalPath().resolveSibling(EconomyConstants.JOURNAL_FILE + ".quarantine-2")),
+            "второй след лежит отдельным файлом");
+    }
+
     @Test
     void unreadableJournalGoesReadOnlyAndKeepsTheEvidence() throws Exception {
         JsonEconomyStore first = store();

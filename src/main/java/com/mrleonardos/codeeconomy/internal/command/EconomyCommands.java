@@ -19,6 +19,7 @@ import com.mrleonardos.codeeconomy.api.EconomyService;
 import com.mrleonardos.codeeconomy.api.model.BalanceEntry;
 import com.mrleonardos.codeeconomy.api.model.ChangeCause;
 import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
+import com.mrleonardos.codeeconomy.api.model.ResultCode;
 import com.mrleonardos.codeeconomy.api.model.TransactionRecord;
 import com.mrleonardos.codeeconomy.api.model.TransferRequest;
 import com.mrleonardos.codeeconomy.api.model.TransferResult;
@@ -34,6 +35,13 @@ public final class EconomyCommands {
     private static final String FORMAT_ARGUMENT = "format";
     private static final String FILE_ARGUMENT = "file";
     private static final String FLAGS_ARGUMENT = "flags";
+    private static final String OFF_ARGUMENT = "off";
+
+    private static final String BALANCE_ROOT = "balance";
+    private static final String PAY_ROOT = "pay";
+    private static final String BALTOP_ROOT = "baltop";
+    private static final String HISTORY_ROOT = "history";
+    private static final String ECO_ROOT = "eco";
 
     private static final String APPLY_FLAG = "--apply";
     private static final String TRANSACTION_PREFIX = "cmd:";
@@ -84,8 +92,33 @@ public final class EconomyCommands {
         return Arrays.asList(balance(), pay(), baltop(), history(), eco());
     }
 
+    /**
+     * Корни на время отхода по незнакомому провайдеру хранилища: те же имена и подсказки, но любой вызов
+     * отвечает готовой строкой о выключенной экономике. Убрать корни целиком значило бы оставить игрока
+     * с «нет такой команды» вместо объяснения.
+     */
+    public static List<CommandNode> offRoots() {
+        return Arrays.asList(
+            offRoot(BALANCE_ROOT, EconomyMessages.USAGE_BALANCE, "bal", "money"),
+            offRoot(PAY_ROOT, EconomyMessages.USAGE_PAY),
+            offRoot(BALTOP_ROOT, EconomyMessages.USAGE_BALTOP),
+            offRoot(HISTORY_ROOT, EconomyMessages.USAGE_HISTORY),
+            offRoot(ECO_ROOT, EconomyMessages.USAGE_ECO));
+    }
+
+    private static CommandNode offRoot(String name, String usage, String... aliases) {
+        CommandNode node = CommandNode.literal(name)
+            .usage(usage)
+            .optionalArg(OFF_ARGUMENT, ArgumentTypes.text())
+            .executes(context -> context.replyError(EconomyMessages.ECONOMY_OFF));
+        if (aliases.length > 0) {
+            node.alias(aliases);
+        }
+        return node;
+    }
+
     private CommandNode balance() {
-        CommandNode node = CommandNode.literal("balance")
+        CommandNode node = CommandNode.literal(BALANCE_ROOT)
             .alias("bal", "money")
             .permission(EconomyNodes.BALANCE)
             .usage(EconomyMessages.USAGE_BALANCE)
@@ -95,7 +128,7 @@ public final class EconomyCommands {
     }
 
     private CommandNode pay() {
-        CommandNode node = CommandNode.literal("pay")
+        CommandNode node = CommandNode.literal(PAY_ROOT)
             .permission(EconomyNodes.PAY)
             .usage(EconomyMessages.USAGE_PAY)
             .arg(PLAYER_ARGUMENT, arguments.player())
@@ -105,7 +138,7 @@ public final class EconomyCommands {
     }
 
     private CommandNode baltop() {
-        CommandNode node = CommandNode.literal("baltop")
+        CommandNode node = CommandNode.literal(BALTOP_ROOT)
             .permission(EconomyNodes.BALTOP)
             .usage(EconomyMessages.USAGE_BALTOP)
             .optionalArg(PAGE_ARGUMENT, pageArgument())
@@ -114,7 +147,7 @@ public final class EconomyCommands {
     }
 
     private CommandNode history() {
-        return CommandNode.literal("history")
+        return CommandNode.literal(HISTORY_ROOT)
             .permission(EconomyNodes.HISTORY)
             .usage(EconomyMessages.USAGE_HISTORY)
             .optionalArg(PAGE_ARGUMENT, pageArgument())
@@ -122,7 +155,7 @@ public final class EconomyCommands {
     }
 
     private CommandNode eco() {
-        CommandNode root = CommandNode.literal("eco")
+        CommandNode root = CommandNode.literal(ECO_ROOT)
             .usage(EconomyMessages.USAGE_ECO)
             .executes(this::branches);
         for (CommandNode branch : adminBranches) {
@@ -487,8 +520,17 @@ public final class EconomyCommands {
     }
 
     private void verify(CommandContext context) {
-        maintenance.verify();
-        context.reply(EconomyMessages.VERIFY_STARTED);
+        MaintenanceOutcome outcome = maintenance.verify();
+        if (outcome.successful()) {
+            context.reply(EconomyMessages.VERIFY_STARTED);
+            return;
+        }
+        if (outcome.code()
+            .orElse(null) == ResultCode.BUSY) {
+            context.replyError(EconomyMessages.VERIFY_BUSY);
+            return;
+        }
+        context.replyError(EconomyMessages.failureKey(outcome.code().get()));
     }
 
     private void checkpoint(CommandContext context) {

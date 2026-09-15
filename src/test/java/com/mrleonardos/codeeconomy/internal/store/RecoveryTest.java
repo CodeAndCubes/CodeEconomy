@@ -264,4 +264,29 @@ class RecoveryTest {
 
         assertFalse(result.corruption() == null, "битая середина поднимает карантин");
     }
+
+    /**
+     * Строка без завершающего {@code \n} отбрасывается всегда, даже целиком валидный JSON: терминатор
+     * ставит только дошедший до диска сброс. Не отброшенная строка проводила бы при рестарте операцию,
+     * которая была отвергнута, и повтор платежа шёл бы второй раз.
+     */
+    @Test
+    void aCompleteJsonLineWithoutTerminatorIsDropped() throws Exception {
+        Path journal = journal("torn-valid");
+        byte[] content = (line(transfer(1L, 1000L, 25000L, 26000L)) + "\n" + line(deposit(2L, 2000L, 26500L)))
+            .getBytes(StandardCharsets.UTF_8);
+        Files.createDirectories(journal.getParent());
+        Files.write(journal, content);
+
+        Recovery.Result result = Recovery.recover(new LinkedHashMap<UUID, AccountView>(), journal, 0L, start(), null);
+
+        assertTrue(result.tailTruncated(), "хвост отмечен оборванным");
+        assertEquals(
+            1,
+            result.records()
+                .size(),
+            "полный JSON без терминатора не проводится");
+        assertEquals(1L, result.replayed());
+        assertFalse(result.corruption() != null, "оборот хвоста это не повреждение середины");
+    }
 }

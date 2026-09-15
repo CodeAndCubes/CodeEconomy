@@ -1,7 +1,9 @@
 package com.mrleonardos.codeeconomy.internal.hud;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -33,6 +35,19 @@ public final class BalanceWatchers {
     public String currency(UUID player) {
         Watcher watcher = watchers.get(player);
         return watcher == null ? null : watcher.currencyId;
+    }
+
+    /** Кто сейчас просит показ: снимок для периодической перепроверки права. */
+    public Set<UUID> players() {
+        return new HashSet<>(watchers.keySet());
+    }
+
+    /** Забыть отправленную сумму: следующая уйдёт, даже если число не менялось. */
+    public void resetSent(UUID player) {
+        Watcher watcher = watchers.get(player);
+        if (watcher != null) {
+            watcher.sent = false;
+        }
     }
 
     /**

@@ -28,8 +28,10 @@ import com.mrleonardos.codeeconomy.api.model.TransferResult;
  *
  * <p>
  * Отказ приходит значением {@link TransferResult} с кодом из конечного перечня. Повтор операции с тем
- * же {@code transactionId} возвращает записанный исход с кодом {@code DUPLICATE}, поэтому успешным
- * исходом считается и {@code OK}, и {@code DUPLICATE}.
+ * же {@code transactionId} в пределах окна идемпотентности возвращает записанный исход с кодом
+ * {@code DUPLICATE}, поэтому успешным исходом считается и {@code OK}, и {@code DUPLICATE}. Окно
+ * ограничено настройкой {@code history.idempotencyHours} (заводские 72 часа): после его выхода повтор
+ * с тем же идентификатором проводится заново, как новая операция.
  */
 public interface EconomyService {
 

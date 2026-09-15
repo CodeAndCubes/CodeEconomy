@@ -18,7 +18,8 @@ import com.mrleonardos.codeeconomy.api.model.AccountView;
 
 final class NameResolver {
 
-    private static final int SUGGESTION_LIMIT = 50;
+    /** Наибольшее число подсказок одному запросу: имя одно, место зажима одно. */
+    static final int SUGGESTION_LIMIT = 50;
 
     private final Supplier<Map<UUID, AccountView>> accounts;
 
@@ -55,9 +56,6 @@ final class NameResolver {
     }
 
     List<String> suggest(String partial, int limit) {
-        if (limit <= 0) {
-            return new ArrayList<>();
-        }
         String prefix = partial.toLowerCase(Locale.ROOT);
         Set<String> candidates = new LinkedHashSet<>(Players.onlineNames());
         for (AccountView account : accounts.get()
@@ -69,12 +67,22 @@ final class NameResolver {
                         .get());
             }
         }
+        return startingWith(candidates, prefix, limit);
+    }
+
+    /** Кандидаты по префиксу, зажатые общим пределом подсказок. */
+    static List<String> startingWith(Iterable<String> candidates, String partial, int limit) {
         List<String> found = new ArrayList<>();
+        int cap = Math.min(Math.max(limit, 0), SUGGESTION_LIMIT);
+        if (cap == 0) {
+            return found;
+        }
+        String prefix = partial.toLowerCase(Locale.ROOT);
         for (String candidate : candidates) {
             if (candidate.toLowerCase(Locale.ROOT)
                 .startsWith(prefix)) {
                 found.add(candidate);
-                if (found.size() == Math.min(limit, SUGGESTION_LIMIT)) {
+                if (found.size() == cap) {
                     break;
                 }
             }

@@ -18,4 +18,7 @@ public interface ClientSink {
      * @param decimals   сколько младших знаков показывать человеку
      */
     void balance(String currencyId, long amount, int decimals);
+
+    /** Сервер снял показ: числа на экране быть не должно. */
+    void hide();
 }

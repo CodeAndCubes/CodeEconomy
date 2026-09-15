@@ -26,8 +26,9 @@ import com.mrleonardos.codeeconomy.api.store.StoreVerification;
  * <p>
  * Истина это журнал, поэтому каждая строка несёт итоговые балансы сторон. Переигрывание пересчитывает
  * балансы и сверяет их с записанными, любое расхождение попадает в отчёт. Оборванный хвост append-only
- * файла это штатная потеря последней записи, битая строка в середине означает потерянные деньги и
- * уводит журнал в карантин.
+ * файла это штатная потеря последней записи: строка без завершающего {@code \n} отбрасывается всегда,
+ * какой бы целой она ни выглядела. Битая строка в середине означает потерянные деньги и уводит журнал
+ * в карантин.
  */
 public final class Recovery {
 
@@ -48,15 +49,22 @@ public final class Recovery {
      */
     public static Result recover(Map<UUID, AccountView> checkpoint, Path journal, long checkpointSeq,
         StartBalances start, Logger log) {
-        List<String> lines = lines(journal);
+        Read read = read(journal);
         Replay replay = new Replay(checkpoint, start);
-        if (lines == null) {
+        if (read == null) {
             if (log != null) {
                 log.error("Journal {} exists but cannot be read", journal);
             }
             replay.unreadable = true;
             return replay.result();
         }
+        if (read.tornTail()) {
+            if (log != null) {
+                log.warn("Journal {} ends with a line without a terminator, the line is dropped", journal.getFileName());
+            }
+            replay.tailTruncated = true;
+        }
+        List<String> lines = read.lines();
         for (int index = 0; index < lines.size(); index++) {
             String line = lines.get(index)
                 .trim();
@@ -65,16 +73,6 @@ public final class Recovery {
             }
             TransactionRecord record = JournalCodec.decode(line);
             if (record == null) {
-                if (index == lastNonBlank(lines)) {
-                    if (log != null) {
-                        log.warn(
-                            "Journal {} ends with an incomplete line {}, it is dropped",
-                            journal.getFileName(),
-                            Integer.valueOf(index + 1));
-                    }
-                    replay.tailTruncated = true;
-                    break;
-                }
                 long[] range = lostRange(lines, index);
                 if (log != null) {
                     log.warn(
@@ -141,10 +139,11 @@ public final class Recovery {
                     + " while the check was reading it, the snapshot stands at seq "
                     + upToSeq);
         }
-        List<String> lines = lines(journal);
-        if (lines == null) {
+        Read read = read(journal);
+        if (read == null) {
             return StoreVerification.voided("journal " + journal.getFileName() + " cannot be read, the check is void");
         }
+        List<String> lines = read.lines();
         Replay replay = new Replay(checkpoint, start);
         long settled = 0L;
         long ahead = 0L;
@@ -232,21 +231,15 @@ public final class Recovery {
         return new long[] { Math.max(lowest, 0L), Math.max(highest, 0L) };
     }
 
-    private static int lastNonBlank(List<String> lines) {
-        for (int index = lines.size() - 1; index >= 0; index--) {
-            if (!lines.get(index)
-                .trim()
-                .isEmpty()) {
-                return index;
-            }
-        }
-        return -1;
-    }
-
-    /** Строки журнала, пустой список для отсутствующего файла, {@code null} для нечитаемого. */
-    static List<String> lines(Path journal) {
+    /**
+     * Прочитанный журнал, {@code null} для нечитаемого. Строкой считается только завершённый
+     * {@code \n} текст: обрывок после последнего терминатора это оборванная запись и отбрасывается
+     * всегда, даже если он целиком валидный JSON. Терминатор ставит только дошедший до диска сброс, и
+     * операция, чья строка его не получила, не проводилась.
+     */
+    static Read read(Path journal) {
         if (!Files.exists(journal)) {
-            return Collections.emptyList();
+            return new Read(Collections.emptyList(), false);
         }
         if (!Files.isRegularFile(journal)) {
             return null;
@@ -264,12 +257,33 @@ public final class Recovery {
                 }
                 symbol = reader.read();
             }
-            if (line.length() > 0) {
-                lines.add(line.toString());
-            }
-            return lines;
+            boolean torn = line.toString()
+                .trim()
+                .length() > 0;
+            return new Read(lines, torn);
         } catch (IOException failure) {
             return null;
+        }
+    }
+
+    /** Завершённые строки журнала и признак оборванного хвоста. */
+    public static final class Read {
+
+        private final List<String> lines;
+        private final boolean tornTail;
+
+        Read(List<String> lines, boolean tornTail) {
+            this.lines = Collections.unmodifiableList(new ArrayList<>(lines));
+            this.tornTail = tornTail;
+        }
+
+        public List<String> lines() {
+            return lines;
+        }
+
+        /** Правда ли после последнего терминатора остался непустой обрывок. */
+        public boolean tornTail() {
+            return tornTail;
         }
     }
 

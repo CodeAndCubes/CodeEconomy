@@ -9,6 +9,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
+import org.apache.logging.log4j.Logger;
+
 import com.mrleonardos.codecore.api.util.Scheduler;
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
 import com.mrleonardos.codeeconomy.api.EconomyService;
@@ -34,7 +36,9 @@ import com.mrleonardos.codeeconomy.internal.service.PlayerLookup;
  * <p>
  * Перевод собирается из {@code withdraw} у одного кошелька и {@code add} у другого. Между этими двумя
  * вызовами нет ни атомарности, ни отката, и снаружи это не чинится: падение сервера между ними теряет
- * деньги. Об этом уходит строка в лог при выборе владельца.
+ * деньги. Результат каждого шага подтверждается перечитанным балансом: тихий провал {@code add} или
+ * {@code set} отвечает отказом {@code STORE_FAILURE} со строкой в логе, а не успехом с ложным числом.
+ * О неатомарности уходит строка в лог при выборе владельца.
  */
 final class ForgeEssentialsEconomy implements EconomyService {
 
@@ -42,13 +46,15 @@ final class ForgeEssentialsEconomy implements EconomyService {
     private final Supplier<EconomySection> section;
     private final PlayerLookup lookup;
     private final Scheduler scheduler;
+    private final Logger log;
 
     ForgeEssentialsEconomy(ForgeEssentialsApi api, Supplier<EconomySection> section, PlayerLookup lookup,
-        Scheduler scheduler) {
+        Scheduler scheduler, Logger log) {
         this.api = api;
         this.section = section;
         this.lookup = lookup;
         this.scheduler = scheduler;
+        this.log = log;
     }
 
     @Override
@@ -180,7 +186,15 @@ final class ForgeEssentialsEconomy implements EconomyService {
             return TransferResult
                 .failure(ResultCode.INSUFFICIENT, request.transactionId(), Long.valueOf(api.balance(source)), null);
         }
-        api.add(target, request.amount());
+        if (!api.add(target, request.amount())) {
+            log.warn(
+                "ForgeEssentials took {} from {} but the wallet of {} did not confirm the add (tx {}): the transfer is reported as failed, the money left the sender and did not arrive",
+                Long.valueOf(request.amount()),
+                from,
+                to,
+                request.transactionId());
+            return TransferResult.failure(ResultCode.STORE_FAILURE, request.transactionId());
+        }
         return TransferResult
             .success(request.transactionId(), Long.valueOf(api.balance(source)), Long.valueOf(api.balance(target)));
     }
@@ -193,7 +207,15 @@ final class ForgeEssentialsEconomy implements EconomyService {
         if (wallet == null) {
             return TransferResult.failure(ResultCode.STORE_FAILURE, request.transactionId());
         }
-        api.add(wallet, amount);
+        if (!api.add(wallet, amount)) {
+            log.warn(
+                "The wallet of {} did not confirm the add of {} (tx {}): the operation is reported as failed",
+                request.to()
+                    .get(),
+                Long.valueOf(amount),
+                request.transactionId());
+            return TransferResult.failure(ResultCode.STORE_FAILURE, request.transactionId());
+        }
         return TransferResult.success(request.transactionId(), null, Long.valueOf(api.balance(wallet)));
     }
 
@@ -223,7 +245,15 @@ final class ForgeEssentialsEconomy implements EconomyService {
         if (amount < 0L) {
             return TransferResult.failure(ResultCode.BELOW_FLOOR, request.transactionId());
         }
-        api.set(wallet, amount);
+        if (!api.set(wallet, amount)) {
+            log.warn(
+                "The wallet of {} did not confirm the set of {} (tx {}): the operation is reported as failed",
+                request.to()
+                    .get(),
+                Long.valueOf(amount),
+                request.transactionId());
+            return TransferResult.failure(ResultCode.STORE_FAILURE, request.transactionId());
+        }
         return TransferResult.success(request.transactionId(), null, Long.valueOf(api.balance(wallet)));
     }
 

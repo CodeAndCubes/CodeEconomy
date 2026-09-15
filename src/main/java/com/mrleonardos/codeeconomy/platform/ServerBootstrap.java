@@ -6,6 +6,7 @@ import java.nio.file.Paths;
 import net.minecraftforge.common.DimensionManager;
 
 import com.mrleonardos.codecore.api.CodeApi;
+import com.mrleonardos.codecore.api.command.CommandNode;
 import com.mrleonardos.codecore.api.service.PermissionService;
 import com.mrleonardos.codeeconomy.CodeEconomyMod;
 import com.mrleonardos.codeeconomy.api.EconomyApi;
@@ -75,7 +76,15 @@ public final class ServerBootstrap implements ServerInstaller {
     public void postInit() {
         EconomyApi.freeze();
         lookup.checkMeta(CodeApi.adapters(), CodeEconomyMod.LOG);
-        bootstrap.start(CodeApi.adapters(), this::takeTheRole);
+        if (bootstrap.start(CodeApi.adapters(), this::takeTheRole)) {
+            return;
+        }
+        if (bootstrap.stoodDownForStorage()) {
+            for (CommandNode root : EconomyCommands.offRoots()) {
+                CodeApi.commands()
+                    .register(root);
+            }
+        }
     }
 
     @Override
@@ -124,6 +133,7 @@ public final class ServerBootstrap implements ServerInstaller {
                 new ForgeLifecycle(
                     lifecycle,
                     service,
+                    hud,
                     clock,
                     bootstrap.config()
                         .autosaveTicks()));

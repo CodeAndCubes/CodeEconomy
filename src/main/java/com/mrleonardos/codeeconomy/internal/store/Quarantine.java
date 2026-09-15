@@ -1,9 +1,9 @@
 package com.mrleonardos.codeeconomy.internal.store;
 
 import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 
 import org.apache.logging.log4j.Logger;
 
@@ -20,23 +20,41 @@ public final class Quarantine {
 
     public static final String SUFFIX = ".quarantine";
 
+    private static final int MOVE_ATTEMPTS = 1000;
+
     private Quarantine() {}
 
-    /** Убрать журнал в файл с суффиксом {@code .quarantine}. Цель или пустой ответ, если файл не ушёл. */
+    /**
+     * Убрать журнал в файл с суффиксом {@code .quarantine}. Занятое имя не затирается: перенос
+     * повторяется со следующим номером, чтобы след каждой потери оставался на диске. Цель или пустой
+     * ответ, если файл не ушёл.
+     */
     public static Path quarantine(Path journal, Logger log) {
-        Path target = journal.resolveSibling(journal.getFileName() + SUFFIX);
-        try {
-            Files.move(journal, target, StandardCopyOption.REPLACE_EXISTING);
-            if (log != null) {
-                log.warn("Journal {} is moved to {} and is out of use", journal.getFileName(), target.getFileName());
+        for (int attempt = 1; attempt <= MOVE_ATTEMPTS; attempt++) {
+            Path target = journal
+                .resolveSibling(journal.getFileName() + SUFFIX + (attempt == 1 ? "" : "-" + attempt));
+            try {
+                Files.move(journal, target);
+                if (log != null) {
+                    log.warn("Journal {} is moved to {} and is out of use", journal.getFileName(), target.getFileName());
+                }
+                return target;
+            } catch (FileAlreadyExistsException taken) {
+                continue;
+            } catch (IOException failure) {
+                if (log != null) {
+                    log.error("Failed to move damaged journal {}: {}", journal, failure.toString());
+                }
+                return null;
             }
-            return target;
-        } catch (IOException failure) {
-            if (log != null) {
-                log.error("Failed to move damaged journal {}: {}", journal, failure.toString());
-            }
-            return null;
         }
+        if (log != null) {
+            log.error(
+                "Damaged journal {} cannot be moved: {} quarantine copies already sit next to it",
+                journal.getFileName(),
+                Integer.valueOf(MOVE_ATTEMPTS));
+        }
+        return null;
     }
 
     /** Признак карантина в состоянии мира: когда случилось и что именно потеряно. */

@@ -17,6 +17,7 @@ codeeconomy.command.usage.eco.unlock=/eco unlock
 codeeconomy.command.usage.eco.import=/eco import <format> [file] [--apply]
 
 codeeconomy.message.eco.branches=Branches: %s
+codeeconomy.message.off=The economy is off: the storage provider named in the main config is not registered. Tell the administrator
 
 codeeconomy.message.balance.self=Balance: %s
 codeeconomy.message.balance.show=Balance of %s: %s
@@ -29,6 +30,7 @@ codeeconomy.message.reset.done=Balance of %s is back to the starting one: %s
 codeeconomy.message.freeze.on=Account of %s is frozen
 codeeconomy.message.freeze.off=Account of %s is unfrozen
 codeeconomy.message.verify.started=Journal check is running, the report goes to the server log
+codeeconomy.message.verify.busy=A check is already running, wait for its report in the server log
 codeeconomy.message.import.skip=Rejected: %s
 codeeconomy.message.checkpoint.done=Snapshot written, boundary %s
 codeeconomy.message.compact.done=Checkpoint rewritten, journal truncated, boundary %s

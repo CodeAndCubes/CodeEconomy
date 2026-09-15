@@ -37,6 +37,8 @@ public final class EconomyMessages {
 
     public static final String ECO_BRANCHES = "codeeconomy.message.eco.branches";
 
+    public static final String ECONOMY_OFF = "codeeconomy.message.off";
+
     public static final String BALANCE_SELF = "codeeconomy.message.balance.self";
     public static final String BALANCE_SHOW = "codeeconomy.message.balance.show";
 
@@ -50,6 +52,7 @@ public final class EconomyMessages {
     public static final String FREEZE_OFF = "codeeconomy.message.freeze.off";
 
     public static final String VERIFY_STARTED = "codeeconomy.message.verify.started";
+    public static final String VERIFY_BUSY = "codeeconomy.message.verify.busy";
     public static final String CHECKPOINT_DONE = "codeeconomy.message.checkpoint.done";
     public static final String CHECKPOINT_SKIPPED = "codeeconomy.message.checkpoint.skipped";
     public static final String COMPACT_DONE = "codeeconomy.message.compact.done";

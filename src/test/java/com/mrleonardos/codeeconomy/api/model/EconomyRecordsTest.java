@@ -402,7 +402,7 @@ class EconomyRecordsTest {
         TransferResult refused = TransferResult.failure(ResultCode.INSUFFICIENT, "cmd:2", 100L, 5000L);
         assertFalse(refused.applied());
         assertEquals(ResultCode.INSUFFICIENT, refused.code());
-        assertEquals(15, ResultCode.values().length);
+        assertEquals(16, ResultCode.values().length);
         assertEquals(
             OptionalLong.empty(),
             TransferResult.failure(ResultCode.UNKNOWN_PLAYER, "cmd:3")

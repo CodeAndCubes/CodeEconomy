@@ -578,6 +578,38 @@ class LedgerTest {
                 .getAsLong());
     }
 
+    /**
+     * Правило отсутствия одно на весь мод: неизвестная валюта отвечает ноль, отсутствующий счёт или
+     * валюта, которой счёт не касался, отвечает стартовый баланс. Код, javadoc {@code AccountView} и
+     * восстановление журнала говорят об этом одно и то же.
+     */
+    @Test
+    void balanceAnswersByOneAbsenceRule() {
+        store.snapshot = StoreSnapshot.of(
+            Collections.singletonMap(EconomyFixtures.ALICE, account(COIN, EconomyFixtures.ALICE, 300L)),
+            0L,
+            Collections.<TransactionRecord>emptyList());
+        Ledger ledger = assembled(
+            EconomyFixtures.currencies(EconomyFixtures.coin(), EconomyFixtures.credit()),
+            EconomyFixtures.config(),
+            EconomyFixtures.lookup(),
+            EconomyFixtures.LOG);
+
+        assertEquals(
+            0L,
+            balance(ledger, "doubloon", EconomyFixtures.ALICE),
+            "неизвестная валюта отвечает ноль");
+        assertEquals(
+            START,
+            balance(ledger, EconomyFixtures.BOB),
+            "отсутствующий счёт отвечает стартовый баланс валюты");
+        assertEquals(
+            100L,
+            balance(ledger, CREDIT, EconomyFixtures.ALICE),
+            "валюта, которой счёт не касался, отвечает стартовый баланс");
+        assertEquals(300L, balance(ledger, EconomyFixtures.ALICE), "записанный баланс отвечает как есть");
+    }
+
     private Ledger coinLedger(AccountView... accounts) {
         Map<UUID, AccountView> state = new LinkedHashMap<>();
         for (AccountView account : accounts) {

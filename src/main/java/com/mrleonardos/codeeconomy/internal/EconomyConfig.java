@@ -39,6 +39,11 @@ public final class EconomyConfig {
 
     /** Имя провайдера хранилища из главного файла, пустое значение считается встроенным json. */
     public String provider() {
+        return providerOf(storage);
+    }
+
+    /** Нормализованное имя провайдера: им пользуется и сборка до открытия настроек, не только конфиг. */
+    public static String providerOf(StorageSettings storage) {
         String named = storage.provider();
         return named == null || named.trim()
             .isEmpty() ? JsonEconomyStore.ID : named.trim();

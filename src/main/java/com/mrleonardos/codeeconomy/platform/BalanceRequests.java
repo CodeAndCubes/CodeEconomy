@@ -23,4 +23,9 @@ final class BalanceRequests implements ServerSink {
     public void watch(PlayerRef player, String currencyId) {
         hud.watch(player.id(), currencyId);
     }
+
+    @Override
+    public void unwatch(PlayerRef player) {
+        hud.forget(player.id());
+    }
 }

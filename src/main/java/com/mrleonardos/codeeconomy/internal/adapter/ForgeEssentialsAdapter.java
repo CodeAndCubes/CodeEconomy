@@ -104,7 +104,7 @@ public final class ForgeEssentialsAdapter implements RoleAdapter {
             log.warn("ForgeEssentials economy is not up yet, its wallets answer as soon as its own module starts");
         }
         return RoleServices.builder()
-            .add(EconomyService.class, new ForgeEssentialsEconomy(found, section, lookup, scheduler))
+            .add(EconomyService.class, new ForgeEssentialsEconomy(found, section, lookup, scheduler, log))
             .build();
     }
 

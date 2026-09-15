@@ -19,14 +19,15 @@ import com.mrleonardos.codecore.api.util.Scheduler;
 import com.mrleonardos.codeeconomy.api.CurrencyIds;
 import com.mrleonardos.codeeconomy.api.guard.TransferGuard;
 import com.mrleonardos.codeeconomy.api.model.ChangeCause;
+import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
 import com.mrleonardos.codeeconomy.api.model.ResultCode;
 import com.mrleonardos.codeeconomy.api.model.TransferResult;
+import com.mrleonardos.codeeconomy.internal.EconomyConfig;
 import com.mrleonardos.codeeconomy.internal.EconomyFixtures;
 import com.mrleonardos.codeeconomy.internal.TestConfigs;
 import com.mrleonardos.codeeconomy.internal.engine.Ledger;
 import com.mrleonardos.codeeconomy.internal.event.EventDispatcher;
 import com.mrleonardos.codeeconomy.internal.guard.PayCooldownGuard;
-import com.mrleonardos.codeeconomy.internal.store.JsonEconomyStore;
 
 class LedgerServiceTest {
 
@@ -118,14 +119,13 @@ class LedgerServiceTest {
     }
 
     private LedgerService service(EconomyFixtures.Configs config, java.util.function.BooleanSupplier mainThread) {
-        // другой тест регистрирует в общем реестре EconomyApi чужого провайдера json, встроенного
-        // получаем через несуществующее имя
-        config.provider = "builtin-under-test";
         TestConfigs files = TestConfigs.of(root);
+        List<CurrencyRecord> currencies = Collections.singletonList(EconomyFixtures.coin());
+        EconomyConfig built = config.build();
         return LedgerService.create(
-            config.build(),
-            Collections.singletonList(EconomyFixtures.coin()),
-            files.open(JsonEconomyStore.spec()),
+            EconomyFixtures.jsonStore(files, currencies, built.idempotencyMillis(), now::get),
+            built,
+            currencies,
             scheduler(),
             mainThread,
             tick::get,

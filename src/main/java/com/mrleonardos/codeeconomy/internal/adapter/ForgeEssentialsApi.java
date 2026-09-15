@@ -94,12 +94,28 @@ final class ForgeEssentialsApi {
         return Reflected.flag(Reflected.call(walletWithdraw, wallet, Long.valueOf(amount)), false);
     }
 
-    void add(Object wallet, long amount) {
+    /**
+     * Прибавить сумму и подтвердить её перечитанным балансом. Чужой метод молчит даже при провале, и
+     * без подтверждения провал выглядел бы проведённой операцией.
+     */
+    boolean add(Object wallet, long amount) {
+        long before = balance(wallet);
         Reflected.call(walletAdd, wallet, Long.valueOf(amount));
+        return balance(wallet) == saturatedSum(before, amount);
     }
 
-    void set(Object wallet, long amount) {
+    /** Назначить сумму и подтвердить её перечитанным балансом. */
+    boolean set(Object wallet, long amount) {
         Reflected.call(walletSet, wallet, Long.valueOf(amount));
+        return balance(wallet) == amount;
+    }
+
+    private static long saturatedSum(long value, long amount) {
+        try {
+            return Math.addExact(value, amount);
+        } catch (ArithmeticException overflow) {
+            return value > 0L ? Long.MAX_VALUE : Long.MIN_VALUE;
+        }
     }
 
     /** Как чужой мод называет свою единственную валюту. */

@@ -6,8 +6,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 import org.apache.logging.log4j.Logger;
@@ -39,18 +40,23 @@ final class PlatformMaintenance implements EconomyMaintenance {
     private final EconomyLimits limits;
     private final Supplier<Path> sources;
     private final Logger log;
-    private final ExecutorService verifier;
+    private final Executor verifier;
+    private final AtomicBoolean verifying = new AtomicBoolean();
 
     PlatformMaintenance(LedgerService service, EconomyLimits limits, Supplier<Path> sources, Logger log) {
+        this(service, limits, sources, log, Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "CodeEconomy-Verify");
+            thread.setDaemon(true);
+            return thread;
+        }));
+    }
+
+    PlatformMaintenance(LedgerService service, EconomyLimits limits, Supplier<Path> sources, Logger log, Executor verifier) {
         this.service = service;
         this.limits = limits;
         this.sources = sources;
         this.log = log;
-        this.verifier = Executors.newSingleThreadExecutor(runnable -> {
-            Thread thread = new Thread(runnable, "CodeEconomy-Verify");
-            thread.setDaemon(true);
-            return thread;
-        });
+        this.verifier = verifier;
     }
 
     @Override
@@ -73,41 +79,52 @@ final class PlatformMaintenance implements EconomyMaintenance {
         return MaintenanceOutcome.success(0L);
     }
 
+    /**
+     * Запустить сверку в фоне. Пока прошлая не кончилась, новая не начинается: сто нажатий это не сто
+     * полных сверок в однопоточном исполнителе, а один честный ответ «уже идёт».
+     */
     @Override
     public MaintenanceOutcome verify() {
+        if (!verifying.compareAndSet(false, true)) {
+            return MaintenanceOutcome.failure(ResultCode.BUSY);
+        }
         verifier.execute(() -> {
-            StoreVerification verification = service.verifyDetailed();
-            if (verification.voided()) {
-                log.warn(
-                    "Economy verify did not run: {}",
-                    verification.findings()
-                        .get(0));
-                return;
-            }
-            for (String finding : verification.findings()) {
-                log.warn("Economy verify: {}", finding);
-            }
-            if (verification.settled() > 0L) {
-                log.info(
-                    "Economy verify skipped {} journal line(s) at or below the checkpoint, their balances are in the checkpoint",
-                    Long.valueOf(verification.settled()));
-            }
-            if (verification.ahead() > 0L) {
-                log.info(
-                    "Economy verify skipped {} journal line(s) written while it was running, they are past the snapshot",
-                    Long.valueOf(verification.ahead()));
-            }
-            if (verification.findings()
-                .isEmpty()) {
-                log.info("Economy verify finished, the journal and the accounts agree");
-            } else {
-                log.warn(
-                    "Economy verify finished with {} finding(s), first: {}",
-                    Integer.valueOf(
+            try {
+                StoreVerification verification = service.verifyDetailed();
+                if (verification.voided()) {
+                    log.warn(
+                        "Economy verify did not run: {}",
                         verification.findings()
-                            .size()),
-                    verification.findings()
-                        .get(0));
+                            .get(0));
+                    return;
+                }
+                for (String finding : verification.findings()) {
+                    log.warn("Economy verify: {}", finding);
+                }
+                if (verification.settled() > 0L) {
+                    log.info(
+                        "Economy verify skipped {} journal line(s) at or below the checkpoint, their balances are in the checkpoint",
+                        Long.valueOf(verification.settled()));
+                }
+                if (verification.ahead() > 0L) {
+                    log.info(
+                        "Economy verify skipped {} journal line(s) written while it was running, they are past the snapshot",
+                        Long.valueOf(verification.ahead()));
+                }
+                if (verification.findings()
+                    .isEmpty()) {
+                    log.info("Economy verify finished, the journal and the accounts agree");
+                } else {
+                    log.warn(
+                        "Economy verify finished with {} finding(s), first: {}",
+                        Integer.valueOf(
+                            verification.findings()
+                                .size()),
+                        verification.findings()
+                            .get(0));
+                }
+            } finally {
+                verifying.set(false);
             }
         });
         return MaintenanceOutcome.success(0L);
@@ -167,6 +184,9 @@ final class PlatformMaintenance implements EconomyMaintenance {
             return MaintenanceOutcome.failure(ResultCode.UNKNOWN_CURRENCY);
         }
         Path source = resolve(file);
+        if (source == null) {
+            return MaintenanceOutcome.failure(ResultCode.INVALID_REQUEST);
+        }
         BalanceImporters.Imported imported = BalanceImporters.read(format, source, currency, limits);
         List<MaintenanceOutcome.Row> rows = new ArrayList<>();
         long moved = applyImport(format, source, currency, imported, apply, rows);
@@ -252,15 +272,20 @@ final class PlatformMaintenance implements EconomyMaintenance {
         }
     }
 
+    /**
+     * Путь источника импорта. Право на импорт не даёт разбирать произвольные файлы диска: годится имя
+     * или относительный путь внутри папки источника, абсолютный путь и выход через {@code ..}
+     * отвергаются пустым ответом.
+     */
     private Path resolve(String file) {
         String name = file == null || file.trim()
             .isEmpty() ? "" : file.trim();
-        Path given = Paths.get(name);
-        if (given.isAbsolute()) {
-            return given;
+        if (name.contains("..") || Paths.get(name)
+            .isAbsolute()) {
+            return null;
         }
         return sources.get()
-            .resolve(given);
+            .resolve(name);
     }
 
     private MaintenanceOutcome guard() {

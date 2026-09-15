@@ -1,6 +1,8 @@
 package com.mrleonardos.codeeconomy.internal;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.IntSupplier;
@@ -13,10 +15,13 @@ import com.mrleonardos.codecore.api.config.ConfigFile;
 import com.mrleonardos.codecore.api.config.ConfigRoles;
 import com.mrleonardos.codecore.api.config.ConfigService;
 import com.mrleonardos.codecore.api.config.SectionSpec;
+import com.mrleonardos.codecore.api.config.StorageSettings;
 import com.mrleonardos.codecore.api.util.Scheduler;
 import com.mrleonardos.codeeconomy.EconomyConstants;
+import com.mrleonardos.codeeconomy.api.EconomyApi;
 import com.mrleonardos.codeeconomy.api.EconomyLimits;
 import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
+import com.mrleonardos.codeeconomy.api.store.EconomyStore;
 import com.mrleonardos.codeeconomy.internal.adapter.ForgeEssentialsAdapter;
 import com.mrleonardos.codeeconomy.internal.adapter.LedgerAdapter;
 import com.mrleonardos.codeeconomy.internal.event.EventDispatcher;
@@ -36,7 +41,8 @@ import com.mrleonardos.codeeconomy.internal.store.JsonEconomyStore;
  * <p>
  * Роль ушла адаптеру или стоит {@code off}, и мод отходит целиком: ни команд, ни журнала, ни чекпоинта,
  * ни одного созданного файла. Существующие файлы при этом не трогаются, поэтому возврат владельца в
- * {@code [owners]} возвращает и деньги.
+ * {@code [owners]} возвращает и деньги. Незнакомое имя провайдера в {@code [storage] provider}
+ * выключает то же самое, но команды остаются и отвечают готовой строкой: экономика выключена.
  */
 public final class EconomyBootstrap {
 
@@ -83,6 +89,11 @@ public final class EconomyBootstrap {
      * Кто держит роль, и что мод делает дальше. Спрашивается после того, как ядро решило роли, и до
      * того, как оно отдаёт команды стартующему серверу.
      *
+     * <p>
+     * Незнакомое имя провайдера хранилища это тот же отход, но команды остаются и отвечают готовой
+     * строкой о выключенной экономике: молчаливое «нет такой команды» тут запрещено так же, как и
+     * молчаливый откат на встроенное хранилище.
+     *
      * @param whenOwned корни команд, подписки на события мира и фоновый писатель: всё, что при чужом
      *                  владельце роли не должно появиться вовсе
      * @return правда ли мод работает сам
@@ -95,18 +106,26 @@ public final class EconomyBootstrap {
                 owner == null ? "nobody" : owner);
             return false;
         }
+        LedgerService assembled = own == null ? null : own.service();
+        if (assembled == null) {
+            return false;
+        }
         log.info(
             "Role economy is held by {}, storage provider from the main config is {}",
             owner,
-            configs.storage(ConfigRoles.ECONOMY)
-                .provider());
-        whenOwned.accept(service());
+            config.provider());
+        whenOwned.accept(assembled);
         return true;
     }
 
     /** Правда ли роль осталась за нашим модом. */
     public boolean owns() {
         return EconomyConstants.OWNER.equals(owner);
+    }
+
+    /** Правда ли отход случился из-за незнакомого имени провайдера, а не из-за роли. */
+    public boolean stoodDownForStorage() {
+        return owns() && own != null && own.service() == null;
     }
 
     /** Имя владельца роли или {@code null}, если роль не занята никем. */
@@ -135,23 +154,43 @@ public final class EconomyBootstrap {
             .pageSize();
     }
 
+    /**
+     * Сборка леджера. Имя провайдера проверяется до открытия любого своего файла: незнакомое имя шва
+     * выключает зависящее от него целиком, отката на встроенное хранилище нет, и выключенный мод не
+     * оставляет после себя ни журнала, ни чекпоинта, ни пустых настроек.
+     */
     private LedgerService assemble() {
+        StorageSettings storage = configs.storage(ConfigRoles.ECONOMY);
+        String provider = EconomyConfig.providerOf(storage);
+        Optional<EconomyStore> foreign = EconomyApi.store(provider);
+        if (!foreign.isPresent() && !JsonEconomyStore.ID.equals(provider)) {
+            log.warn(
+                "Storage seam [storage] provider names {}, which is not registered (registered: {}); "
+                    + "the economy is switched off: no services, no journal, no files",
+                provider,
+                registeredIds());
+            return null;
+        }
         settings = configs.open(EconomySettings.spec());
-        config = EconomyConfig.of(
-            settings.get(),
-            section.get(),
-            configs.storage(ConfigRoles.ECONOMY),
-            configs.audit(ConfigRoles.ECONOMY));
+        config = EconomyConfig.of(settings.get(), section.get(), storage, configs.audit(ConfigRoles.ECONOMY));
         limits = config.ceilings(log);
         List<CurrencyRecord> currencies = Currencies.load(
             configs.open(Currencies.spec())
                 .get(),
             limits,
             log);
+        EconomyStore store = foreign.isPresent() ? foreign.get()
+            : new JsonEconomyStore(
+                configs.open(JsonEconomyStore.spec()),
+                limits,
+                Currencies.startBalances(currencies),
+                config.idempotencyMillis(),
+                clock,
+                log);
         return LedgerService.create(
+            store,
             config,
             currencies,
-            configs.open(JsonEconomyStore.spec()),
             scheduler,
             mainThread,
             ticks,
@@ -159,5 +198,13 @@ public final class EconomyBootstrap {
             lookup,
             events,
             log);
+    }
+
+    private static List<String> registeredIds() {
+        List<String> ids = new ArrayList<>();
+        for (EconomyStore store : EconomyApi.stores()) {
+            ids.add(store.id());
+        }
+        return ids;
     }
 }

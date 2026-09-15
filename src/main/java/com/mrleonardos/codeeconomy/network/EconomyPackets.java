@@ -4,6 +4,8 @@ import com.mrleonardos.codecore.api.CodeApi;
 import com.mrleonardos.codecore.api.net.NetChannel;
 import com.mrleonardos.codecore.api.net.PacketSide;
 import com.mrleonardos.codeeconomy.network.c2s.BalanceRequestPacket;
+import com.mrleonardos.codeeconomy.network.c2s.BalanceUnwatchPacket;
+import com.mrleonardos.codeeconomy.network.s2c.BalanceHidePacket;
 import com.mrleonardos.codeeconomy.network.s2c.BalancePacket;
 
 /**
@@ -26,6 +28,8 @@ public final class EconomyPackets {
 
         channel.register(BalancePacket.class, PacketSide.CLIENT_BOUND);
         channel.register(BalanceRequestPacket.class, PacketSide.SERVER_BOUND);
+        channel.register(BalanceUnwatchPacket.class, PacketSide.SERVER_BOUND);
+        channel.register(BalanceHidePacket.class, PacketSide.CLIENT_BOUND);
     }
 
     /** Канал экономики. Доступен после {@link #register()}. */
