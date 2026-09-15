@@ -60,7 +60,9 @@ public final class Recovery {
         }
         if (read.tornTail()) {
             if (log != null) {
-                log.warn("Journal {} ends with a line without a terminator, the line is dropped", journal.getFileName());
+                log.warn(
+                    "Journal {} ends with a line without a terminator, the line is dropped",
+                    journal.getFileName());
             }
             replay.tailTruncated = true;
         }

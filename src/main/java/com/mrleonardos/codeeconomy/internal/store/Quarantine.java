@@ -31,12 +31,14 @@ public final class Quarantine {
      */
     public static Path quarantine(Path journal, Logger log) {
         for (int attempt = 1; attempt <= MOVE_ATTEMPTS; attempt++) {
-            Path target = journal
-                .resolveSibling(journal.getFileName() + SUFFIX + (attempt == 1 ? "" : "-" + attempt));
+            Path target = journal.resolveSibling(journal.getFileName() + SUFFIX + (attempt == 1 ? "" : "-" + attempt));
             try {
                 Files.move(journal, target);
                 if (log != null) {
-                    log.warn("Journal {} is moved to {} and is out of use", journal.getFileName(), target.getFileName());
+                    log.warn(
+                        "Journal {} is moved to {} and is out of use",
+                        journal.getFileName(),
+                        target.getFileName());
                 }
                 return target;
             } catch (FileAlreadyExistsException taken) {

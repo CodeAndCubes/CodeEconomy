@@ -89,9 +89,7 @@ final class JournalAppender {
         FileChannel fresh = FileChannel
             .open(target, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
         try {
-            ByteBuffer source = ByteBuffer.wrap(
-                encoded(lines)
-                    .getBytes(StandardCharsets.UTF_8));
+            ByteBuffer source = ByteBuffer.wrap(encoded(lines).getBytes(StandardCharsets.UTF_8));
             while (source.hasRemaining()) {
                 fresh.write(source);
             }

@@ -110,10 +110,7 @@ public final class EconomyBootstrap {
         if (assembled == null) {
             return false;
         }
-        log.info(
-            "Role economy is held by {}, storage provider from the main config is {}",
-            owner,
-            config.provider());
+        log.info("Role economy is held by {}, storage provider from the main config is {}", owner, config.provider());
         whenOwned.accept(assembled);
         return true;
     }
@@ -187,17 +184,8 @@ public final class EconomyBootstrap {
                 config.idempotencyMillis(),
                 clock,
                 log);
-        return LedgerService.create(
-            store,
-            config,
-            currencies,
-            scheduler,
-            mainThread,
-            ticks,
-            clock,
-            lookup,
-            events,
-            log);
+        return LedgerService
+            .create(store, config, currencies, scheduler, mainThread, ticks, clock, lookup, events, log);
     }
 
     private static List<String> registeredIds() {

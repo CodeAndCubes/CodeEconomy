@@ -139,7 +139,8 @@ class PlatformMaintenanceImportTest {
     private LedgerService service() {
         TestConfigs files = TestConfigs.of(root);
         List<CurrencyRecord> currencies = Collections.singletonList(EconomyFixtures.coin());
-        EconomyConfig config = EconomyFixtures.configs().build();
+        EconomyConfig config = EconomyFixtures.configs()
+            .build();
         return LedgerService.create(
             EconomyFixtures.jsonStore(files, currencies, config.idempotencyMillis(), now::get),
             config,
@@ -221,15 +222,13 @@ class PlatformMaintenanceImportTest {
 
         assertEquals(
             ResultCode.INVALID_REQUEST,
-            maintenance
-                .importBalances("flatjson", source.toString(), false)
+            maintenance.importBalances("flatjson", source.toString(), false)
                 .code()
                 .get(),
             "абсолютный путь отвергнут");
         assertEquals(
             ResultCode.INVALID_REQUEST,
-            maintenance
-                .importBalances("flatjson", "../" + source.getFileName(), false)
+            maintenance.importBalances("flatjson", "../" + source.getFileName(), false)
                 .code()
                 .get(),
             "выход за папку источника отвергнут");
@@ -247,7 +246,10 @@ class PlatformMaintenanceImportTest {
             EconomyFixtures.LOG,
             held::add);
 
-        assertTrue(maintenance.verify().successful(), "первая сверка началась");
+        assertTrue(
+            maintenance.verify()
+                .successful(),
+            "первая сверка началась");
         assertEquals(
             ResultCode.BUSY,
             maintenance.verify()
@@ -256,6 +258,9 @@ class PlatformMaintenanceImportTest {
             "вторая, пока первая не кончилась, не начинается");
         held.forEach(Runnable::run);
 
-        assertTrue(maintenance.verify().successful(), "после окончания сверки новая начинается");
+        assertTrue(
+            maintenance.verify()
+                .successful(),
+            "после окончания сверки новая начинается");
     }
 }

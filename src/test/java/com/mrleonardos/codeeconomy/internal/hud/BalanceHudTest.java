@@ -61,7 +61,12 @@ class BalanceHudTest {
         PlayerLookup lookup = lookup();
         List<CurrencyRecord> currencies = Arrays.asList(EconomyFixtures.coin(), EconomyFixtures.credit());
         service = LedgerService.create(
-            EconomyFixtures.jsonStore(TestConfigs.of(root), currencies, config.build().idempotencyMillis(), () -> 1000L),
+            EconomyFixtures.jsonStore(
+                TestConfigs.of(root),
+                currencies,
+                config.build()
+                    .idempotencyMillis(),
+                () -> 1000L),
             config.build(),
             currencies,
             EconomyFixtures.inlineScheduler(),

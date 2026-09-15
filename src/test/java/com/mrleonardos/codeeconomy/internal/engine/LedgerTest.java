@@ -595,10 +595,7 @@ class LedgerTest {
             EconomyFixtures.lookup(),
             EconomyFixtures.LOG);
 
-        assertEquals(
-            0L,
-            balance(ledger, "doubloon", EconomyFixtures.ALICE),
-            "неизвестная валюта отвечает ноль");
+        assertEquals(0L, balance(ledger, "doubloon", EconomyFixtures.ALICE), "неизвестная валюта отвечает ноль");
         assertEquals(
             START,
             balance(ledger, EconomyFixtures.BOB),

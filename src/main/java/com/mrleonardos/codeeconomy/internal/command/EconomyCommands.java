@@ -530,7 +530,10 @@ public final class EconomyCommands {
             context.replyError(EconomyMessages.VERIFY_BUSY);
             return;
         }
-        context.replyError(EconomyMessages.failureKey(outcome.code().get()));
+        context.replyError(
+            EconomyMessages.failureKey(
+                outcome.code()
+                    .get()));
     }
 
     private void checkpoint(CommandContext context) {

@@ -51,7 +51,8 @@ final class PlatformMaintenance implements EconomyMaintenance {
         }));
     }
 
-    PlatformMaintenance(LedgerService service, EconomyLimits limits, Supplier<Path> sources, Logger log, Executor verifier) {
+    PlatformMaintenance(LedgerService service, EconomyLimits limits, Supplier<Path> sources, Logger log,
+        Executor verifier) {
         this.service = service;
         this.limits = limits;
         this.sources = sources;

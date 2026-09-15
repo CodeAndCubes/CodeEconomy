@@ -103,11 +103,7 @@ class EconomyBootstrapTest {
      */
     @Test
     void anUnknownProviderNameStandsTheModDown() {
-        TestConfigs.writeMain(
-            root,
-            "schemaVersion = 1",
-            "[storage]",
-            "provider = \"mongo\"");
+        TestConfigs.writeMain(root, "schemaVersion = 1", "[storage]", "provider = \"mongo\"");
         configs = TestConfigs.of(root);
         EconomyBootstrap bootstrap = declared();
         adapters.decide(ConfigRoles.ECONOMY, TestAdapters.AUTO);

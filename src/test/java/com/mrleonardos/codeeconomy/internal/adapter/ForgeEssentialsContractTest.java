@@ -142,9 +142,14 @@ class ForgeEssentialsContractTest extends EconomyServiceContract {
         foreign.ignoreWrites = true;
 
         TransferResult result = service.transfer(
-            TransferRequest
-                .transfer(EconomyFixtures.ALICE, EconomyFixtures.BOB, 200L, service.defaultCurrencyId(), "tx1", null,
-                    null));
+            TransferRequest.transfer(
+                EconomyFixtures.ALICE,
+                EconomyFixtures.BOB,
+                200L,
+                service.defaultCurrencyId(),
+                "tx1",
+                null,
+                null));
 
         assertEquals(ResultCode.STORE_FAILURE, result.code(), "тихий провал add не проводится как успех");
         assertEquals(800L, foreign.balanceOf(EconomyFixtures.ALICE), "списание у источника правда прошло");

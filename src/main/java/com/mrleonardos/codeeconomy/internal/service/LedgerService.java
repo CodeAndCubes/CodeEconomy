@@ -69,8 +69,8 @@ public final class LedgerService implements EconomyService {
      * открыто, поэтому загрузка идёт отдельно, в {@link #loadWorld()} при старте мира.
      */
     public static LedgerService create(EconomyStore store, EconomyConfig config, List<CurrencyRecord> currencies,
-        Scheduler scheduler, BooleanSupplier mainThread, LongSupplier ticks, LongSupplier clock,
-        PlayerLookup lookup, EventDispatcher events, Logger log) {
+        Scheduler scheduler, BooleanSupplier mainThread, LongSupplier ticks, LongSupplier clock, PlayerLookup lookup,
+        EventDispatcher events, Logger log) {
         EconomyLimits limits = config.ceilings(log);
         Ledger ledger = new Ledger(
             () -> store,
