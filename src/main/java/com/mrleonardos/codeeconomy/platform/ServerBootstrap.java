@@ -110,15 +110,17 @@ public final class ServerBootstrap implements ServerInstaller {
             () -> service.ledger()
                 .state()
                 .accounts());
+        SenderSubjects subjects = new SenderSubjects(
+            () -> CodeApi.services()
+                .require(PermissionService.class),
+            names);
         EconomyCommands commands = new EconomyCommands(
             service,
             new PlatformMutations(service),
             new PlatformMaintenance(service, bootstrap.limits(), ServerBootstrap::serverRoot, CodeEconomyMod.LOG),
             new PlatformArguments(names, service),
-            new SenderSubjects(
-                () -> CodeApi.services()
-                    .require(PermissionService.class),
-                names),
+            subjects,
+            new EconomyPresent(service, bootstrap.config(), subjects, bootstrap.pageSize()),
             bootstrap.pageSize());
         commands.register(CodeApi.commands());
 

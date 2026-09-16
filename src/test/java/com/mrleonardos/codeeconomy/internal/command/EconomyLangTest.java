@@ -59,9 +59,10 @@ class EconomyLangTest {
             }
         }
         for (TransactionRecord.Kind kind : TransactionRecord.Kind.values()) {
-            for (ChangeCause cause : ChangeCause.values()) {
-                declared.add(EconomyMessages.historyRowKey(kind, cause));
-            }
+            declared.add(EconomyMessages.historyKindKey(kind));
+        }
+        for (ChangeCause cause : ChangeCause.values()) {
+            declared.add(EconomyMessages.historyCauseKey(cause));
         }
         assertTrue(declared.size() > 40, "ключей перевода неожиданно мало: " + declared.size());
         return declared;

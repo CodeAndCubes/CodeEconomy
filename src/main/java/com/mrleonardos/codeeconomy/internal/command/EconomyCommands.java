@@ -16,11 +16,9 @@ import com.mrleonardos.codecore.api.command.CommandService;
 import com.mrleonardos.codeeconomy.api.Amounts;
 import com.mrleonardos.codeeconomy.api.CurrencyIds;
 import com.mrleonardos.codeeconomy.api.EconomyService;
-import com.mrleonardos.codeeconomy.api.model.BalanceEntry;
 import com.mrleonardos.codeeconomy.api.model.ChangeCause;
 import com.mrleonardos.codeeconomy.api.model.CurrencyRecord;
 import com.mrleonardos.codeeconomy.api.model.ResultCode;
-import com.mrleonardos.codeeconomy.api.model.TransactionRecord;
 import com.mrleonardos.codeeconomy.api.model.TransferRequest;
 import com.mrleonardos.codeeconomy.api.model.TransferResult;
 import com.mrleonardos.codeeconomy.internal.EconomyNodes;
@@ -45,7 +43,9 @@ public final class EconomyCommands {
 
     private static final String APPLY_FLAG = "--apply";
     private static final String TRANSACTION_PREFIX = "cmd:";
-    private static final String EMPTY_MARKER = "-";
+
+    /** Весь топ или вся история одним списком: страницы нарезает показ, число страниц берётся из списка. */
+    private static final int EVERYTHING = Integer.MAX_VALUE;
 
     private static final int MIN_PAGE = 1;
     private static final int MAX_PAGE = 1000000;
@@ -57,16 +57,18 @@ public final class EconomyCommands {
     private final EconomyMaintenance maintenance;
     private final EconomyArguments arguments;
     private final EconomySubjects subjects;
+    private final EconomyPresents presents;
     private final IntSupplier pageSize;
     private final List<CommandNode> adminBranches;
 
     public EconomyCommands(EconomyService economy, EconomyMutations mutations, EconomyMaintenance maintenance,
-        EconomyArguments arguments, EconomySubjects subjects, IntSupplier pageSize) {
+        EconomyArguments arguments, EconomySubjects subjects, EconomyPresents presents, IntSupplier pageSize) {
         this.economy = economy;
         this.mutations = mutations;
         this.maintenance = maintenance;
         this.arguments = arguments;
         this.subjects = subjects;
+        this.presents = presents;
         this.pageSize = pageSize;
         this.adminBranches = Arrays.asList(
             give(),
@@ -292,13 +294,13 @@ public final class EconomyCommands {
     }
 
     private void branches(CommandContext context) {
-        List<String> visible = new ArrayList<>();
+        List<CommandNode> visible = new ArrayList<>();
         for (CommandNode branch : adminBranches) {
             if (subjects.senderHas(context, branch.permissionNode())) {
-                visible.add(branch.name());
+                visible.add(branch);
             }
         }
-        context.reply(EconomyMessages.ECO_BRANCHES, visible.isEmpty() ? EMPTY_MARKER : join(visible));
+        presents.branches(context, visible);
     }
 
     private void balance(CommandContext context) {
@@ -317,12 +319,7 @@ public final class EconomyCommands {
             context.replyError(CommandMessages.NO_PERMISSION);
             return;
         }
-        long amount = economy.balance(target, currency.id());
-        if (target.equals(self)) {
-            context.reply(EconomyMessages.BALANCE_SELF, Amounts.format(amount, currency));
-            return;
-        }
-        context.reply(EconomyMessages.BALANCE_SHOW, name(target), Amounts.format(amount, currency));
+        presents.balance(context, target, target.equals(self), currency, economy.balance(target, currency.id()));
     }
 
     private void pay(CommandContext context) {
@@ -453,31 +450,15 @@ public final class EconomyCommands {
             context.replyError(CommandMessages.PLAYERS_ONLY);
             return;
         }
-        showHistory(context, self, page(context));
+        showHistory(context, self, true, page(context));
     }
 
     private void adminHistory(CommandContext context) {
-        UUID target = context.get(PLAYER_ARGUMENT);
-        showHistory(context, target, page(context));
+        showHistory(context, context.get(PLAYER_ARGUMENT), false, page(context));
     }
 
-    private void showHistory(CommandContext context, UUID target, int page) {
-        List<TransactionRecord> records = economy.history(target, page - 1, pageSize.getAsInt());
-        if (records.isEmpty()) {
-            context.reply(EconomyMessages.HISTORY_EMPTY);
-            return;
-        }
-        context.reply(EconomyMessages.HISTORY_HEADER, page);
-        for (TransactionRecord record : records) {
-            context.reply(EconomyMessages.historyRowKey(record.kind(), record.cause()), shownAmount(record, target));
-            if (record.reason()
-                .isPresent()) {
-                context.reply(
-                    EconomyMessages.HISTORY_REASON,
-                    record.reason()
-                        .get());
-            }
-        }
+    private void showHistory(CommandContext context, UUID target, boolean own, int page) {
+        presents.history(context, target, own, economy.history(target, 0, EVERYTHING), page);
     }
 
     private void baltop(CommandContext context) {
@@ -485,24 +466,7 @@ public final class EconomyCommands {
         if (currency == null) {
             return;
         }
-        int page = page(context);
-        List<BalanceEntry> entries = economy.top(currency.id(), page - 1, pageSize.getAsInt());
-        if (entries.isEmpty()) {
-            context.reply(EconomyMessages.BALTOP_EMPTY);
-            return;
-        }
-        context.reply(EconomyMessages.BALTOP_HEADER, currency.displayName(), page);
-        context.reply(EconomyMessages.BALTOP_NOTE);
-        int place = (page - 1) * pageSize.getAsInt();
-        for (BalanceEntry entry : entries) {
-            place++;
-            context.reply(
-                EconomyMessages.BALTOP_ROW,
-                place,
-                entry.name()
-                    .orElseGet(() -> name(entry.player())),
-                Amounts.format(entry.amount(), currency));
-        }
+        presents.top(context, currency, economy.top(currency.id(), 0, EVERYTHING), page(context));
     }
 
     private void freeze(CommandContext context) {
@@ -585,7 +549,11 @@ public final class EconomyCommands {
             return;
         }
         MaintenanceOutcome outcome = maintenance.importBalances(CurrencyIds.normalize(format), file, apply);
-        replyWithValues(context, outcome, apply ? EconomyMessages.IMPORT_DONE : EconomyMessages.IMPORT_DRY);
+        if (!outcome.successful()) {
+            replyFailure(context, outcome);
+            return;
+        }
+        presents.importReport(context, apply, number(outcome, 0), number(outcome, 1), outcome.rows());
     }
 
     private void replyWithNumber(CommandContext context, MaintenanceOutcome outcome, String successKey) {
@@ -594,31 +562,15 @@ public final class EconomyCommands {
             arguments.add(Long.valueOf(outcome.number()));
             arguments.addAll(outcome.values());
             context.reply(successKey, arguments.toArray());
-            replyRows(context, outcome);
             return;
         }
         replyFailure(context, outcome);
     }
 
-    private void replyWithValues(CommandContext context, MaintenanceOutcome outcome, String successKey) {
-        if (outcome.successful()) {
-            context.reply(
-                successKey,
-                outcome.values()
-                    .toArray());
-            replyRows(context, outcome);
-            return;
-        }
-        replyFailure(context, outcome);
-    }
-
-    private void replyRows(CommandContext context, MaintenanceOutcome outcome) {
-        for (MaintenanceOutcome.Row row : outcome.rows()) {
-            context.reply(
-                row.key(),
-                row.arguments()
-                    .toArray());
-        }
+    /** Значение обслуживания числом: отчёт импорта несёт перенесённое и отклонённое именно так. */
+    private static long number(MaintenanceOutcome outcome, int index) {
+        return ((Number) outcome.values()
+            .get(index)).longValue();
     }
 
     private void replyFailure(CommandContext context, MaintenanceOutcome outcome) {
@@ -714,33 +666,9 @@ public final class EconomyCommands {
         return Amounts.format(amount, currency);
     }
 
-    private String shownAmount(TransactionRecord record, UUID target) {
-        boolean taken = record.from()
-            .filter(target::equals)
-            .isPresent();
-        long amount = taken ? record.fromAfter()
-            .orElse(0L)
-            : record.toAfter()
-                .orElse(0L);
-        CurrencyRecord currency = economy.currency(record.currencyId())
-            .orElse(null);
-        return currency == null ? Long.toString(amount) : Amounts.format(amount, currency);
-    }
-
     private String name(UUID player) {
         return subjects.playerName(player)
             .orElse(player.toString());
-    }
-
-    private static String join(List<String> parts) {
-        StringBuilder joined = new StringBuilder();
-        for (String part : parts) {
-            if (joined.length() > 0) {
-                joined.append(", ");
-            }
-            joined.append(part);
-        }
-        return joined.toString();
     }
 
     private static String transactionId() {

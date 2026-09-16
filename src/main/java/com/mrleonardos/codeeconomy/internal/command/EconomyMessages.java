@@ -35,12 +35,7 @@ public final class EconomyMessages {
     public static final String USAGE_ECO_UNLOCK = "codeeconomy.command.usage.eco.unlock";
     public static final String USAGE_ECO_IMPORT = "codeeconomy.command.usage.eco.import";
 
-    public static final String ECO_BRANCHES = "codeeconomy.message.eco.branches";
-
     public static final String ECONOMY_OFF = "codeeconomy.message.off";
-
-    public static final String BALANCE_SELF = "codeeconomy.message.balance.self";
-    public static final String BALANCE_SHOW = "codeeconomy.message.balance.show";
 
     public static final String PAY_SENT = "codeeconomy.message.pay.sent";
 
@@ -64,14 +59,32 @@ public final class EconomyMessages {
     public static final String IMPORT_ROW = "codeeconomy.message.import.row";
     public static final String IMPORT_MORE = "codeeconomy.message.import.more";
 
-    public static final String BALTOP_HEADER = "codeeconomy.message.baltop.header";
     public static final String BALTOP_NOTE = "codeeconomy.message.baltop.note";
-    public static final String BALTOP_ROW = "codeeconomy.message.baltop.row";
     public static final String BALTOP_EMPTY = "codeeconomy.message.baltop.empty";
 
-    public static final String HISTORY_HEADER = "codeeconomy.message.history.header";
     public static final String HISTORY_EMPTY = "codeeconomy.message.history.empty";
-    public static final String HISTORY_REASON = "codeeconomy.message.history.reason";
+
+    public static final String CARD_ECO_TITLE = "codeeconomy.card.eco_title";
+    public static final String CARD_ECO_NONE = "codeeconomy.card.eco_none";
+    public static final String CARD_CURRENCY = "codeeconomy.card.currency";
+    public static final String CARD_BALANCE = "codeeconomy.card.balance";
+    public static final String CARD_TRANSFER = "codeeconomy.card.transfer";
+    public static final String CARD_TRANSFER_RANGE = "codeeconomy.card.transfer_range";
+    public static final String CARD_TRANSFER_HOVER = "codeeconomy.card.transfer_hover";
+    public static final String CARD_HISTORY = "codeeconomy.card.history";
+    public static final String CARD_HISTORY_HOVER = "codeeconomy.card.history_hover";
+    public static final String CARD_TOP = "codeeconomy.card.top";
+    public static final String CARD_TOP_HOVER = "codeeconomy.card.top_hover";
+    public static final String CARD_PAY = "codeeconomy.card.pay";
+    public static final String CARD_PAY_HOVER = "codeeconomy.card.pay_hover";
+    public static final String CARD_PLAYER_HISTORY = "codeeconomy.card.player_history";
+    public static final String CARD_PLAYER_HISTORY_HOVER = "codeeconomy.card.player_history_hover";
+    public static final String CARD_TOP_TITLE = "codeeconomy.card.top_title";
+    public static final String CARD_TOP_ROW_HOVER = "codeeconomy.card.top_row_hover";
+    public static final String CARD_HISTORY_TITLE = "codeeconomy.card.history_title";
+    public static final String CARD_HISTORY_ROW_HOVER = "codeeconomy.card.history_row_hover";
+    public static final String CARD_REASON = "codeeconomy.card.reason";
+    public static final String CARD_IMPORT_TITLE = "codeeconomy.card.import_title";
 
     public static final String FAILURE_BAD_AMOUNT = "codeeconomy.message.failure.bad_amount";
     public static final String FAILURE_UNKNOWN_CURRENCY = "codeeconomy.message.failure.unknown_currency";
@@ -120,11 +133,13 @@ public final class EconomyMessages {
         }
     }
 
-    public static String historyRowKey(TransactionRecord.Kind kind, ChangeCause cause) {
-        return "codeeconomy.message.history." + kind.name()
-            .toLowerCase(Locale.ROOT)
-            + "."
-            + cause.name()
-                .toLowerCase(Locale.ROOT);
+    public static String historyKindKey(TransactionRecord.Kind kind) {
+        return "codeeconomy.message.history.kind." + kind.name()
+            .toLowerCase(Locale.ROOT);
+    }
+
+    public static String historyCauseKey(ChangeCause cause) {
+        return "codeeconomy.message.history.cause." + cause.name()
+            .toLowerCase(Locale.ROOT);
     }
 }

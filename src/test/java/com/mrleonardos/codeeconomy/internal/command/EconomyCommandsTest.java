@@ -48,6 +48,7 @@ class EconomyCommandsTest {
     private RecordingMutations mutations;
     private RecordingMaintenance maintenance;
     private TestSubjects subjects;
+    private RecordingPresents presents;
     private EconomyCommands commands;
 
     @BeforeEach
@@ -56,11 +57,12 @@ class EconomyCommandsTest {
         mutations = new RecordingMutations();
         maintenance = new RecordingMaintenance();
         subjects = new TestSubjects();
+        presents = new RecordingPresents();
         commands = commands();
     }
 
     private EconomyCommands commands() {
-        return new EconomyCommands(economy, mutations, maintenance, arguments(), subjects, () -> 10);
+        return new EconomyCommands(economy, mutations, maintenance, arguments(), subjects, presents, () -> 10);
     }
 
     @Test
@@ -169,17 +171,24 @@ class EconomyCommandsTest {
         TestCommandContext context = new TestCommandContext();
         execute(eco(), context);
 
-        assertEquals(EconomyMessages.ECO_BRANCHES, context.last().key);
-        assertEquals("history", context.last().arguments.get(0));
+        assertEquals(1, presents.branches.size());
+        assertEquals(
+            "history",
+            presents.branches.get(0)
+                .get(0)
+                .name());
     }
 
     @Test
-    void strangerWithoutNodesSeesOnlyThePlaceholder() {
+    void strangerWithoutNodesReachesTheEmptyBranchList() {
         TestCommandContext context = new TestCommandContext();
         execute(eco(), context);
 
-        assertEquals(EconomyMessages.ECO_BRANCHES, context.last().key);
-        assertEquals("-", context.last().arguments.get(0));
+        assertEquals(1, presents.branches.size());
+        assertTrue(
+            presents.branches.get(0)
+                .isEmpty(),
+            "список веток фильтруется по правам и без нод пуст");
     }
 
     @Test
@@ -189,8 +198,12 @@ class EconomyCommandsTest {
 
         execute(root("balance"), context);
 
-        assertEquals(EconomyMessages.BALANCE_SELF, context.last().key);
-        assertEquals("12.50 $", context.last().arguments.get(0));
+        assertEquals(1, presents.balances.size());
+        RecordingPresents.Balance shown = presents.balances.get(0);
+        assertEquals(SENDER, shown.player);
+        assertTrue(shown.own);
+        assertEquals("coin", shown.currency.id());
+        assertEquals(1250L, shown.amount);
     }
 
     @Test
@@ -203,15 +216,18 @@ class EconomyCommandsTest {
         assertTrue(refused.last().error);
         assertEquals(CommandMessages.NO_PERMISSION, refused.last().key);
         assertTrue(mutations.requests.isEmpty());
+        assertTrue(presents.balances.isEmpty());
 
         subjects.held.add(EconomyNodes.BALANCE_OTHER);
         subjects.names.put(TARGET, "Alex");
         TestCommandContext allowed = new TestCommandContext().set("player", TARGET.toString());
         execute(root("balance"), allowed);
 
-        assertEquals(EconomyMessages.BALANCE_SHOW, allowed.last().key);
-        assertEquals("Alex", allowed.last().arguments.get(0));
-        assertEquals("1.00 $", allowed.last().arguments.get(1));
+        assertEquals(1, presents.balances.size());
+        RecordingPresents.Balance shown = presents.balances.get(0);
+        assertEquals(TARGET, shown.player);
+        assertFalse(shown.own);
+        assertEquals(100L, shown.amount);
     }
 
     @Test
@@ -424,21 +440,26 @@ class EconomyCommandsTest {
 
     @Test
     void importFlagsReachTheMaintenance() {
-        maintenance.outcome = MaintenanceOutcome.success(0L, "2", "1");
+        maintenance.outcome = MaintenanceOutcome.success(0L, Long.valueOf(2L), Long.valueOf(1L));
 
         TestCommandContext dry = new TestCommandContext().set("format", "flatjson")
             .set("flags", "");
         execute(child(eco(), "import"), dry);
 
         assertEquals("flatjson", maintenance.format);
-        assertEquals(EconomyMessages.IMPORT_DRY, dry.last().key);
+        assertEquals(1, presents.reports.size());
+        RecordingPresents.Report report = presents.reports.get(0);
+        assertFalse(report.apply);
+        assertEquals(2L, report.moved);
+        assertEquals(1L, report.rejected);
 
         TestCommandContext apply = new TestCommandContext().set("format", "essentials")
             .set("flags", "--apply");
         execute(child(eco(), "import"), apply);
 
         assertEquals(Boolean.TRUE, maintenance.apply);
-        assertEquals(EconomyMessages.IMPORT_DONE, apply.last().key);
+        assertEquals(2, presents.reports.size());
+        assertTrue(presents.reports.get(1).apply, "прогон с --apply отмечается в отчёте");
 
         TestCommandContext broken = new TestCommandContext().set("format", "flatjson")
             .set("flags", "--bogus");
@@ -450,48 +471,34 @@ class EconomyCommandsTest {
     }
 
     @Test
-    void baltopRendersRowsAndEmptyPage() {
+    void baltopHandsTheWholeTopToThePresent() {
         economy.top.add(BalanceEntry.of(SENDER, "Steve", 2000L));
         economy.top.add(BalanceEntry.of(TARGET, null, 1000L));
 
         TestCommandContext context = new TestCommandContext();
         execute(root("baltop"), context);
 
-        assertEquals(
-            EconomyMessages.BALTOP_HEADER,
-            context.sent()
-                .get(0).key);
-        assertEquals(
-            EconomyMessages.BALTOP_NOTE,
-            context.sent()
-                .get(1).key);
-        assertEquals(
-            EconomyMessages.BALTOP_ROW,
-            context.sent()
-                .get(2).key);
-        assertEquals(
-            "Steve",
-            context.sent()
-                .get(2).arguments.get(1));
-        assertEquals(
-            EconomyMessages.BALTOP_ROW,
-            context.sent()
-                .get(3).key);
-        assertEquals(
-            TARGET.toString(),
-            context.sent()
-                .get(3).arguments.get(1),
-            "без имени счёт показывает идентификатор");
+        assertEquals(1, presents.tops.size());
+        RecordingPresents.Top shown = presents.tops.get(0);
+        assertEquals("coin", shown.currency.id());
+        assertEquals(2, shown.entries.size());
+        assertFalse(
+            shown.entries.get(1)
+                .name()
+                .isPresent(),
+            "запись без имени доходит как есть, подпись выбирает показ");
+        assertEquals(1, shown.page);
 
         economy.top.clear();
         TestCommandContext empty = new TestCommandContext();
         execute(root("baltop"), empty);
 
-        assertEquals(EconomyMessages.BALTOP_EMPTY, empty.last().key);
+        assertEquals(2, presents.tops.size());
+        assertTrue(presents.tops.get(1).entries.isEmpty(), "пустой топ доходит пустым списком");
     }
 
     @Test
-    void historyShowsRecordsWithCauseAndReason() {
+    void historyHandsRecordsWithReasonToThePresent() {
         economy.history.add(
             TransactionRecord.builder(TransactionRecord.Kind.TRANSFER, "coin", "cmd:one")
                 .seq(1L)
@@ -512,24 +519,17 @@ class EconomyCommandsTest {
         TestCommandContext context = new TestCommandContext();
         execute(root("history"), context);
 
+        assertEquals(1, presents.histories.size());
+        RecordingPresents.History shown = presents.histories.get(0);
+        assertEquals(SENDER, shown.player);
+        assertTrue(shown.own);
+        assertEquals(2, shown.records.size());
         assertEquals(
-            EconomyMessages.HISTORY_HEADER,
-            context.sent()
-                .get(0).key);
-        assertEquals(
-            EconomyMessages.historyRowKey(TransactionRecord.Kind.TRANSFER, ChangeCause.COMMAND),
-            context.sent()
-                .get(1).key);
-        assertEquals(
-            "9.00 $",
-            context.sent()
-                .get(1).arguments.get(0));
-        assertEquals(
-            EconomyMessages.historyRowKey(TransactionRecord.Kind.DEPOSIT, ChangeCause.API),
-            context.sent()
-                .get(2).key);
-        assertEquals(EconomyMessages.HISTORY_REASON, context.last().key);
-        assertEquals("shop:42", context.last().arguments.get(0));
+            "shop:42",
+            shown.records.get(1)
+                .reason()
+                .get());
+        assertEquals(1, shown.page);
     }
 
     @Test
@@ -537,7 +537,8 @@ class EconomyCommandsTest {
         TestCommandContext context = new TestCommandContext();
         execute(root("history"), context);
 
-        assertEquals(EconomyMessages.HISTORY_EMPTY, context.last().key);
+        assertEquals(1, presents.histories.size());
+        assertTrue(presents.histories.get(0).records.isEmpty());
     }
 
     @Test
@@ -810,6 +811,99 @@ class EconomyCommandsTest {
         @Override
         public boolean senderHas(CommandContext context, String node) {
             return held.contains(node);
+        }
+    }
+
+    /** Показ, который помнит вызовы: команды обязаны дойти до него с уже готовыми данными. */
+    private static final class RecordingPresents implements EconomyPresents {
+
+        private final List<List<CommandNode>> branches = new ArrayList<>();
+        private final List<Balance> balances = new ArrayList<>();
+        private final List<Top> tops = new ArrayList<>();
+        private final List<History> histories = new ArrayList<>();
+        private final List<Report> reports = new ArrayList<>();
+
+        @Override
+        public void branches(CommandContext context, List<CommandNode> visible) {
+            branches.add(new ArrayList<>(visible));
+        }
+
+        @Override
+        public void balance(CommandContext context, UUID player, boolean own, CurrencyRecord currency, long amount) {
+            balances.add(new Balance(player, own, currency, amount));
+        }
+
+        @Override
+        public void top(CommandContext context, CurrencyRecord currency, List<BalanceEntry> entries, int page) {
+            tops.add(new Top(currency, new ArrayList<>(entries), page));
+        }
+
+        @Override
+        public void history(CommandContext context, UUID player, boolean own, List<TransactionRecord> records,
+            int page) {
+            histories.add(new History(player, own, new ArrayList<>(records), page));
+        }
+
+        @Override
+        public void importReport(CommandContext context, boolean apply, long moved, long rejected,
+            List<MaintenanceOutcome.Row> rows) {
+            reports.add(new Report(apply, moved, rejected));
+        }
+
+        static final class Balance {
+
+            final UUID player;
+            final boolean own;
+            final CurrencyRecord currency;
+            final long amount;
+
+            Balance(UUID player, boolean own, CurrencyRecord currency, long amount) {
+                this.player = player;
+                this.own = own;
+                this.currency = currency;
+                this.amount = amount;
+            }
+        }
+
+        static final class Top {
+
+            final CurrencyRecord currency;
+            final List<BalanceEntry> entries;
+            final int page;
+
+            Top(CurrencyRecord currency, List<BalanceEntry> entries, int page) {
+                this.currency = currency;
+                this.entries = entries;
+                this.page = page;
+            }
+        }
+
+        static final class History {
+
+            final UUID player;
+            final boolean own;
+            final List<TransactionRecord> records;
+            final int page;
+
+            History(UUID player, boolean own, List<TransactionRecord> records, int page) {
+                this.player = player;
+                this.own = own;
+                this.records = records;
+                this.page = page;
+            }
+        }
+
+        static final class Report {
+
+            final boolean apply;
+            final long moved;
+            final long rejected;
+
+            Report(boolean apply, long moved, long rejected) {
+                this.apply = apply;
+                this.moved = moved;
+                this.rejected = rejected;
+            }
         }
     }
 

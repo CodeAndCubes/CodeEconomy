@@ -16,11 +16,8 @@ codeeconomy.command.usage.eco.compact=/eco compact
 codeeconomy.command.usage.eco.unlock=/eco unlock
 codeeconomy.command.usage.eco.import=/eco import <формат> [файл] [--apply]
 
-codeeconomy.message.eco.branches=Ветки: %s
 codeeconomy.message.off=Экономика выключена: провайдер хранилища из главного файла не зарегистрирован. Сообщите администратору
 
-codeeconomy.message.balance.self=Баланс: %s
-codeeconomy.message.balance.show=Баланс %s: %s
 codeeconomy.message.pay.sent=Переведено %s игроку %s, на счету %s
 
 codeeconomy.message.give.done=Выдано %s игроку %s, на счету %s
@@ -43,34 +40,41 @@ codeeconomy.message.unlock.idle=Карантина нет, снимать неч
 codeeconomy.message.import.row=%s получит %s
 codeeconomy.message.import.more=И ещё строк: %s
 
-codeeconomy.message.baltop.header=Топ по валюте %s, страница %s
 codeeconomy.message.baltop.note=Счёт без операций стоит в топе со стартовым балансом
-codeeconomy.message.baltop.row=%s. %s: %s
 codeeconomy.message.baltop.empty=В топе пока никого нет
 
-codeeconomy.message.history.header=Операции, страница %s
 codeeconomy.message.history.empty=Операций пока нет
-codeeconomy.message.history.reason=Причина: %s
-codeeconomy.message.history.transfer.command=Перевод: баланс %s (команда)
-codeeconomy.message.history.transfer.api=Перевод: баланс %s (чужой мод)
-codeeconomy.message.history.transfer.import=Перевод: баланс %s (импорт)
-codeeconomy.message.history.transfer.migration=Перевод: баланс %s (миграция)
-codeeconomy.message.history.deposit.command=Выдача: баланс %s (команда)
-codeeconomy.message.history.deposit.api=Выдача: баланс %s (чужой мод)
-codeeconomy.message.history.deposit.import=Выдача: баланс %s (импорт)
-codeeconomy.message.history.deposit.migration=Выдача: баланс %s (миграция)
-codeeconomy.message.history.withdraw.command=Снятие: баланс %s (команда)
-codeeconomy.message.history.withdraw.api=Снятие: баланс %s (чужой мод)
-codeeconomy.message.history.withdraw.import=Снятие: баланс %s (импорт)
-codeeconomy.message.history.withdraw.migration=Снятие: баланс %s (миграция)
-codeeconomy.message.history.set.command=Установка баланса: %s (команда)
-codeeconomy.message.history.set.api=Установка баланса: %s (чужой мод)
-codeeconomy.message.history.set.import=Установка баланса: %s (импорт)
-codeeconomy.message.history.set.migration=Установка баланса: %s (миграция)
-codeeconomy.message.history.reset.command=Сброс баланса: %s (команда)
-codeeconomy.message.history.reset.api=Сброс баланса: %s (чужой мод)
-codeeconomy.message.history.reset.import=Сброс баланса: %s (импорт)
-codeeconomy.message.history.reset.migration=Сброс баланса: %s (миграция)
+codeeconomy.message.history.kind.transfer=Перевод
+codeeconomy.message.history.kind.deposit=Выдача
+codeeconomy.message.history.kind.withdraw=Снятие
+codeeconomy.message.history.kind.set=Установка баланса
+codeeconomy.message.history.kind.reset=Сброс баланса
+codeeconomy.message.history.cause.command=команда
+codeeconomy.message.history.cause.api=чужой мод
+codeeconomy.message.history.cause.import=импорт
+codeeconomy.message.history.cause.migration=миграция
+
+codeeconomy.card.eco_title=Ветки /eco
+codeeconomy.card.eco_none=Доступных веток нет
+codeeconomy.card.currency=Валюта
+codeeconomy.card.balance=Баланс
+codeeconomy.card.transfer=Перевод
+codeeconomy.card.transfer_range=от %s до %s
+codeeconomy.card.transfer_hover=Личный потолок перевода администратор может поднять: мета codeeconomy.paylimit
+codeeconomy.card.history=История
+codeeconomy.card.history_hover=Ваши последние операции
+codeeconomy.card.top=Топ
+codeeconomy.card.top_hover=Топ балансов этой валюты
+codeeconomy.card.pay=Перевести
+codeeconomy.card.pay_hover=Подставить начало перевода
+codeeconomy.card.player_history=Операции
+codeeconomy.card.player_history_hover=Операции этого игрока
+codeeconomy.card.top_title=Топ по валюте %s
+codeeconomy.card.top_row_hover=Баланс: %s
+codeeconomy.card.history_title=Операции %s
+codeeconomy.card.history_row_hover=Идентификатор операции: %s
+codeeconomy.card.reason=причина: %s
+codeeconomy.card.import_title=Перенос балансов
 
 codeeconomy.message.failure.bad_amount=Неподходящая сумма: %s
 codeeconomy.message.failure.unknown_currency=Валюты %s не существует

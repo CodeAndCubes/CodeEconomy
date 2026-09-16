@@ -16,11 +16,8 @@ codeeconomy.command.usage.eco.compact=/eco compact
 codeeconomy.command.usage.eco.unlock=/eco unlock
 codeeconomy.command.usage.eco.import=/eco import <format> [file] [--apply]
 
-codeeconomy.message.eco.branches=Branches: %s
 codeeconomy.message.off=The economy is off: the storage provider named in the main config is not registered. Tell the administrator
 
-codeeconomy.message.balance.self=Balance: %s
-codeeconomy.message.balance.show=Balance of %s: %s
 codeeconomy.message.pay.sent=Sent %s to %s, holding %s
 
 codeeconomy.message.give.done=Gave %s to %s, holding %s
@@ -43,34 +40,41 @@ codeeconomy.message.unlock.idle=There is no quarantine to lift
 codeeconomy.message.import.row=%s gets %s
 codeeconomy.message.import.more=More rows: %s
 
-codeeconomy.message.baltop.header=Top for %s, page %s
 codeeconomy.message.baltop.note=An account with no operations stands in the top with the starting balance
-codeeconomy.message.baltop.row=%s. %s: %s
 codeeconomy.message.baltop.empty=The top is empty so far
 
-codeeconomy.message.history.header=Operations, page %s
 codeeconomy.message.history.empty=No operations so far
-codeeconomy.message.history.reason=Reason: %s
-codeeconomy.message.history.transfer.command=Transfer: balance %s (command)
-codeeconomy.message.history.transfer.api=Transfer: balance %s (foreign mod)
-codeeconomy.message.history.transfer.import=Transfer: balance %s (import)
-codeeconomy.message.history.transfer.migration=Transfer: balance %s (migration)
-codeeconomy.message.history.deposit.command=Deposit: balance %s (command)
-codeeconomy.message.history.deposit.api=Deposit: balance %s (foreign mod)
-codeeconomy.message.history.deposit.import=Deposit: balance %s (import)
-codeeconomy.message.history.deposit.migration=Deposit: balance %s (migration)
-codeeconomy.message.history.withdraw.command=Withdraw: balance %s (command)
-codeeconomy.message.history.withdraw.api=Withdraw: balance %s (foreign mod)
-codeeconomy.message.history.withdraw.import=Withdraw: balance %s (import)
-codeeconomy.message.history.withdraw.migration=Withdraw: balance %s (migration)
-codeeconomy.message.history.set.command=Balance set: %s (command)
-codeeconomy.message.history.set.api=Balance set: %s (foreign mod)
-codeeconomy.message.history.set.import=Balance set: %s (import)
-codeeconomy.message.history.set.migration=Balance set: %s (migration)
-codeeconomy.message.history.reset.command=Balance reset: %s (command)
-codeeconomy.message.history.reset.api=Balance reset: %s (foreign mod)
-codeeconomy.message.history.reset.import=Balance reset: %s (import)
-codeeconomy.message.history.reset.migration=Balance reset: %s (migration)
+codeeconomy.message.history.kind.transfer=Transfer
+codeeconomy.message.history.kind.deposit=Deposit
+codeeconomy.message.history.kind.withdraw=Withdraw
+codeeconomy.message.history.kind.set=Balance set
+codeeconomy.message.history.kind.reset=Balance reset
+codeeconomy.message.history.cause.command=command
+codeeconomy.message.history.cause.api=foreign mod
+codeeconomy.message.history.cause.import=import
+codeeconomy.message.history.cause.migration=migration
+
+codeeconomy.card.eco_title=Branches of /eco
+codeeconomy.card.eco_none=No branches available
+codeeconomy.card.currency=Currency
+codeeconomy.card.balance=Balance
+codeeconomy.card.transfer=Transfer
+codeeconomy.card.transfer_range=from %s to %s
+codeeconomy.card.transfer_hover=An administrator can raise your personal ceiling: the codeeconomy.paylimit meta
+codeeconomy.card.history=History
+codeeconomy.card.history_hover=Your recent operations
+codeeconomy.card.top=Top
+codeeconomy.card.top_hover=Top balances of this currency
+codeeconomy.card.pay=Send
+codeeconomy.card.pay_hover=Fill in the start of a transfer
+codeeconomy.card.player_history=Operations
+codeeconomy.card.player_history_hover=Operations of this player
+codeeconomy.card.top_title=Top for %s
+codeeconomy.card.top_row_hover=Balance: %s
+codeeconomy.card.history_title=Operations of %s
+codeeconomy.card.history_row_hover=Operation id: %s
+codeeconomy.card.reason=reason: %s
+codeeconomy.card.import_title=Balance import
 
 codeeconomy.message.failure.bad_amount=Unfitting amount: %s
 codeeconomy.message.failure.unknown_currency=No currency named %s
