@@ -22,10 +22,10 @@ verify` сверяет after-балансы каждой записи.
 
 | Файл | Куда |
 |---|---|
-| `CodeEconomy-1.1.0-server.jar` | `mods/` сервера |
-| `CodeEconomy-1.1.0-client.jar` | `mods/` клиента, по желанию: он рисует баланс на экране |
-| `codeeconomy-1.1.0-api.jar` | тем, кто пишет свой провайдер или мод с оплатой: компиляция |
-| `codeeconomy-1.1.0-dev.jar` | им же: deobf-версия для dev-запусков |
+| `CodeEconomy-1.2.0-server.jar` | `mods/` сервера |
+| `CodeEconomy-1.2.0-client.jar` | `mods/` клиента, по желанию: он рисует баланс на экране |
+| `codeeconomy-1.2.0-api.jar` | тем, кто пишет свой провайдер или мод с оплатой: компиляция |
+| `codeeconomy-1.2.0-dev.jar` | им же: deobf-версия для dev-запусков |
 
 Сервер объявляет `acceptableRemoteVersions = "*"`, поэтому ванильный клиент заходит без вопросов, а
 клиентская часть только добавляет худ. Ставится после CodeCore. Java 8 или 17 и 21 под lwjgl3ify,
@@ -43,9 +43,9 @@ Minecraft 1.7.10, Forge 10.13.4.1614.
 
 | Файл | Куда |
 |---|---|
-| `CodeEconomy-1.1.0-server.jar` | на сервер |
-| `CodeEconomy-1.1.0-client.jar` | игрокам, кто хочет видеть баланс на экране |
-| `codeeconomy-1.1.0.jar` | только для dev-запусков |
+| `CodeEconomy-1.2.0-server.jar` | на сервер |
+| `CodeEconomy-1.2.0-client.jar` | игрокам, кто хочет видеть баланс на экране |
+| `codeeconomy-1.2.0.jar` | только для dev-запусков |
 
 Универсальный jar раздавать игрокам нельзя: его не резали на стороны, и серверный код в нём есть
 физически. Заглавное имя у пары `-server` и `-client` ставит плагин CodeSides, у остальных
@@ -55,8 +55,8 @@ Minecraft 1.7.10, Forge 10.13.4.1614.
 
 1. Собрать и опубликовать зависимости локально: `CodeSides` и `CodeCore` через `publishToMavenLocal`.
 2. Здесь: `./gradlew build`.
-3. На сервер в `mods` положить серверный jar ядра и `CodeEconomy-1.1.0-server.jar`.
-4. Игроку в `mods` положить клиентский jar ядра и `CodeEconomy-1.1.0-client.jar`, если он хочет показ
+3. На сервер в `mods` положить серверный jar ядра и `CodeEconomy-1.2.0-server.jar`.
+4. Игроку в `mods` положить клиентский jar ядра и `CodeEconomy-1.2.0-client.jar`, если он хочет показ
    баланса.
 
 Мод грузится после CodeCore, порядок задаёт `required-after:codecore`. Файлы настроек лежат в
